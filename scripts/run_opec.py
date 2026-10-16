@@ -4,6 +4,7 @@ Run from the project root:
 
     uv run python scripts/run_opec.py            # use the cached prices as they are
     uv run python scripts/run_opec.py --refresh  # re-download prices first
+    uv run python scripts/run_opec.py --official-time  # robustness check: ignore leak times
 
 Steps:
 1. Load XLE and SPY adjusted closes from the cache in data/prices/. Nothing
@@ -21,6 +22,10 @@ Steps:
    settings, events file and code produced the results) and, if any event
    ran, charts/opec_events.png: one small panel per event with abnormal
    returns for days -5 to +5.
+
+With --official-time, events use the official announcement time even where
+a leak time exists, and every output name gets "_official_time" added (see
+output_paths), so this run can never overwrite the main results.
 """
 
 import argparse
@@ -64,13 +69,7 @@ from event_study.windows import (
 
 SECURITY = "XLE"
 BENCHMARK = "SPY"
-# Main results use the leak time where present (DECISIONS.md); False is the
-# official-time robustness check.
-USE_LEAK = True
 EVENTS_PATH = Path("events") / "opec_events.csv"
-RESULTS_PATH = Path("results") / "opec_results.csv"
-RUN_INFO_PATH = Path("results") / "opec_run_info.json"
-CHART_PATH = Path("charts") / "opec_events.png"
 
 # Event days drawn in each panel. Must lie inside the widest event window.
 CHART_DAYS = range(-5, 6)
@@ -91,7 +90,28 @@ def parse_args() -> argparse.Namespace:
         action="store_true",
         help="re-download XLE and SPY prices before running (otherwise the cache is used as is)",
     )
+    parser.add_argument(
+        "--official-time",
+        action="store_true",
+        help="robustness check: use official announcement times, not leak times, "
+        "and write to separate *_official_time output files",
+    )
     return parser.parse_args()
+
+
+def output_paths(official_time: bool) -> tuple[Path, Path, Path]:
+    """(results CSV, run info JSON, chart PNG) for this run.
+
+    Main results use the leak time where present (DECISIONS.md). The
+    official-time robustness run adds "_official_time" to every file name,
+    so it can never overwrite the main outputs.
+    """
+    suffix = "_official_time" if official_time else ""
+    return (
+        Path("results") / f"opec_results{suffix}.csv",
+        Path("results") / f"opec_run_info{suffix}.json",
+        Path("charts") / f"opec_events{suffix}.png",
+    )
 
 
 def check_or_stop(ticker: str, returns: pd.Series) -> None:
@@ -174,7 +194,9 @@ def ticker_info(ticker: str, prices: pd.Series) -> dict:
     }
 
 
-def build_run_info(prices: dict[str, pd.Series], returns_used: pd.Series, git: tuple) -> dict:
+def build_run_info(
+    prices: dict[str, pd.Series], returns_used: pd.Series, git: tuple, use_leak: bool
+) -> dict:
     """Everything needed to tell whether two runs used the same inputs."""
     commit, dirty = git
     return {
@@ -187,7 +209,7 @@ def build_run_info(prices: dict[str, pd.Series], returns_used: pd.Series, git: t
         "est_length": DEFAULT_EST_LENGTH,
         "gap": DEFAULT_GAP,
         "event_windows": [list(w) for w in DEFAULT_EVENT_WINDOWS],
-        "use_leak": USE_LEAK,
+        "use_leak": use_leak,
         "events_file": EVENTS_PATH.as_posix(),
         "events_file_sha256": file_sha256(EVENTS_PATH),
         "yfinance_version": yfinance.__version__,
@@ -251,8 +273,17 @@ def draw_panel(ax, event_id: str, day0: pd.Timestamp, abnormal: pd.Series) -> No
     ax.spines[["top", "right"]].set_visible(False)
 
 
-def draw_chart(results: pd.DataFrame, abnormal: pd.DataFrame, data_end: pd.Timestamp) -> None:
-    """One small panel per event that ran, all on the same y-axis scale."""
+def draw_chart(
+    results: pd.DataFrame,
+    abnormal: pd.DataFrame,
+    data_end: pd.Timestamp,
+    chart_path: Path,
+    results_path: Path,
+) -> None:
+    """One small panel per event that ran, all on the same y-axis scale.
+
+    Saved to chart_path; the caption points to results_path for failed events.
+    """
     ran = results[results["status"] == "ok"]
     rows = math.ceil(len(ran) / PANEL_COLUMNS)
     columns = min(len(ran), PANEL_COLUMNS)
@@ -275,18 +306,20 @@ def draw_chart(results: pd.DataFrame, abnormal: pd.DataFrame, data_end: pd.Times
     caption = (
         f"Market model fitted on {DEFAULT_EST_LENGTH} trading days ending on day "
         f"-{DEFAULT_GAP}. Source: Yahoo Finance adjusted close (yfinance), data through "
-        f"{data_end.date()}. Failed events are not shown; see {RESULTS_PATH.as_posix()}."
+        f"{data_end.date()}. Failed events are not shown; see {results_path.as_posix()}."
     )
     fig.text(0.01, 0.01, caption, fontsize=7, color=TEXT_SECONDARY)
 
-    CHART_PATH.parent.mkdir(parents=True, exist_ok=True)
+    chart_path.parent.mkdir(parents=True, exist_ok=True)
     fig.tight_layout(rect=(0, 0.04, 1, 1))  # leave room at the bottom for the caption
-    fig.savefig(CHART_PATH, dpi=150)
-    print(f"Saved {CHART_PATH}")
+    fig.savefig(chart_path, dpi=150)
+    print(f"Saved {chart_path}")
 
 
 def main() -> None:
     args = parse_args()
+    use_leak = not args.official_time
+    results_path, run_info_path, chart_path = output_paths(args.official_time)
     # Read git first, before this run writes anything.
     git = git_state()
 
@@ -302,7 +335,7 @@ def main() -> None:
     security, benchmark = common_dates(security, benchmark)
 
     # 3-4. Events, the data-coverage check, and the market model.
-    events = load_events(EVENTS_PATH, use_leak=USE_LEAK)
+    events = load_events(EVENTS_PATH, use_leak=use_leak)
     stop_if_data_too_short(events, security.index[-1])
     results, abnormal = run_events(
         events, security, benchmark, DEFAULT_EST_LENGTH, DEFAULT_GAP, DEFAULT_EVENT_WINDOWS
@@ -310,15 +343,15 @@ def main() -> None:
     print_summary(results)
 
     # 5. Save.
-    RESULTS_PATH.parent.mkdir(parents=True, exist_ok=True)
-    results.to_csv(RESULTS_PATH, index=False)
-    print(f"Saved {RESULTS_PATH}")
-    info = build_run_info(prices, security, git)
-    RUN_INFO_PATH.write_text(json.dumps(info, indent=2) + "\n", encoding="utf-8")
+    results_path.parent.mkdir(parents=True, exist_ok=True)
+    results.to_csv(results_path, index=False)
+    print(f"Saved {results_path}")
+    info = build_run_info(prices, security, git, use_leak)
+    run_info_path.write_text(json.dumps(info, indent=2) + "\n", encoding="utf-8")
     print_run_info(info)
-    print(f"Saved {RUN_INFO_PATH}")
+    print(f"Saved {run_info_path}")
     if (results["status"] == "ok").any():
-        draw_chart(results, abnormal, security.index[-1])
+        draw_chart(results, abnormal, security.index[-1], chart_path, results_path)
     else:
         print("No events ran, so no chart.")
 

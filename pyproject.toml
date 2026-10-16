@@ -1,9 +1,9 @@
 [project]
 name = "event-study"
 version = "0.1.0"
-description = "Add your description here"
+description = "Event study framework measuring market reactions to geopolitical events."
 readme = "README.md"
-requires-python = ">=3.13"
+requires-python = ">=3.13,<3.14"
 dependencies = [
     "exchange-calendars>=4.13.2",
     "matplotlib>=3.11.2",

@@ -218,7 +218,8 @@ LEAK = {"leak_datetime_et": "2024-06-03 10:00", "leak_source_url": "https://exam
         ({"surprise_flag": "2"}, "surprise_flag is '2'"),
         ({"surprise_flag": "yes"}, "surprise_flag is 'yes'"),
         ({"source_url": ""}, "source_url is blank"),
-        # Before the trading calendar starts, so event_day_zero raises.
+        # Before the trading calendar starts, so the year-range check raises
+        # first, before event_day_zero is ever called.
         ({"announcement_datetime_et": "1999-06-01 10:00"}, "has year 1999, outside the supported range 2000 to"),
     ],
 )

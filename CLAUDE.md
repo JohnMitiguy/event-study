@@ -9,10 +9,11 @@ Read DECISIONS.md before changing any methodology.
 
 ## Method conventions
 - Simple daily returns from adjusted close.
-- Event day 0 = first trading day the market could react (after 4pm ET, weekends, holidays roll forward).
+- Event day 0 = first trading day the market could react. Times at or after that day's actual close (4pm ET, or 1pm on early-close days), weekends and holidays roll forward.
 - Event time = leak_datetime_et if present, else announcement_datetime_et. Day 0 is computed from event time. Untimed leaks are not used.
 - Windows count trading days, never calendar days.
-- Estimation window must end before the event window starts. No look-ahead.
+- Estimation window must end before day 0 and before every event window starts. No look-ahead.
+- Results code reads prices only through prices.load_cached.
 - Estimation length, gap, and event windows are parameters, never hardcoded.
 - Any averaging across events must count N from status "ok" only and report every excluded event with its reason.
 
@@ -22,6 +23,7 @@ Read DECISIONS.md before changing any methodology.
 - Never invent events, dates, or sources. The user fills the events CSV from primary sources.
 - Flag assumptions instead of silently picking one.
 - Do not commit. The user reviews diffs and commits.
+- At the end of each session, update STATUS.md.
 
 - Before saying a task is done, run `uv run ruff check` and `uv run pytest`, and report both results.
 - Prefer the simplest approach. Don't add files, dependencies, or features beyond what the brief names without asking.

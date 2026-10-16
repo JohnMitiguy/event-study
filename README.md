@@ -10,7 +10,7 @@ A finding of "no measurable effect" is a valid result here and gets reported as 
 
 For each event, a market model is fitted by ordinary least squares: XLE's daily return regressed on SPY's, over an estimation window that ends before the event (by default 120 trading days, ending 10 trading days before day 0). The abnormal return on each day around the event is XLE's actual return minus what the model predicted from SPY that day. Abnormal returns are summed into cumulative abnormal returns (CARs) over short windows, by default days -1 to +1 and -5 to +5. Day 0 is the first trading day the market could react to the news (the leak time if there was a credible timed leak, otherwise the official announcement). All windows count trading days, not calendar days. Returns are simple daily returns from adjusted close prices.
 
-The plan is to average CARs across events and test the average. So far the code produces per-event CARs and per-event test statistics; the cross-event average and test are not built yet. Methodology choices and the reasons for them are in [DECISIONS.md](DECISIONS.md).
+The plan is to average CARs across events and test the average. The across-event tests (cross-sectional t-test, standardized-CAR test, Wilcoxon signed-rank and sign test) exist in `src/event_study/aggregate.py`, but `run_opec.py` does not call them yet, so a run produces only per-event CARs and per-event test statistics. Methodology choices and the reasons for them are in [DECISIONS.md](DECISIONS.md).
 
 ## Project layout
 
@@ -33,7 +33,10 @@ Install [uv](https://docs.astral.sh/uv/), then from the project root:
 uv sync                              # install Python 3.13 and the packages
 uv run pytest                        # run the tests
 uv run python scripts/run_opec.py    # run the OPEC+ study
+uv run python scripts/run_opec.py --official-time    # robustness check: official announcement times, not leaks
 ```
+
+`--official-time` writes to `results/opec_results_official_time.csv`, `results/opec_run_info_official_time.json` and `charts/opec_events_official_time.png`, so it never overwrites the main outputs.
 
 The first run of `run_opec.py` downloads prices from Yahoo Finance into `data/prices/`; after that it reuses them (see [Price data](#price-data)).
 
@@ -79,18 +82,18 @@ One row per event. Fill it in from primary sources only.
 
 Rules:
 
-- **Time of day is required.** A row needs an announcement time of day from a primary source. If you can only find the date, do not enter the event. List it under [Excluded events](#excluded-events) with the reason.
+- **The time must place the event against the close.** A row needs a time precise enough to place the event against the close. If the source gives only a date, enter a representative time and write `date-only` in `notes`, plus the reason every plausible time gives the same day 0 (for example: Sunday meeting, any time gives Monday; weekday Vienna meeting ending in business hours, before the US close). If the date alone cannot settle day 0, don't enter the row; list it under [Excluded events](#excluded-events) with the reason. Leak times must be exact, from a timestamped source.
 - **Untimed leaks are not used.** If a leak is known only by date, without a time, leave `leak_datetime_et` and `leak_source_url` blank so the event falls back to `announcement_datetime_et`. Write in `notes` that an untimed leak existed, and list the leak under [Excluded events](#excluded-events).
 - **Leak fields go together.** `leak_datetime_et` and `leak_source_url` are either both filled or both blank.
 - **Leak comes first.** `leak_datetime_et` must be earlier than `announcement_datetime_et`.
 - **Eastern wall-clock time, no offset.** "Naive" means you write the time an Eastern clock showed (EST or EDT, whichever applied on that date) and leave out any UTC offset. This applies to both announcement and leak times.
 - **Converting from Vienna time.** OPEC sources often give Vienna time. Vienna is usually 6 hours ahead of Eastern, but only 5 hours for a few weeks around the clock changes, because the US and EU change their clocks on different dates. Convert with a time zone tool instead of subtracting by hand. Record the original source time in `notes` (for example `source: 14:30 Vienna`).
-- **Event time, not event day 0.** The study's event time is `leak_datetime_et` if present, otherwise `announcement_datetime_et`. Day 0 is worked out in code from the event time (times after 4pm ET, on weekends, or on holidays roll forward to the next trading day).
+- **Event time, not event day 0.** The study's event time is `leak_datetime_et` if present, otherwise `announcement_datetime_et`. Day 0 is worked out in code from the event time: times at or after that day's actual close (1pm on early-close days), on weekends, or on holidays roll forward to the next trading day.
 - **Quote text with commas.** If `confound_note` or `notes` contains a comma, wrap the value in double quotes, or it will split into extra columns.
 
 ### Excluded events
 
-Events, or leak timestamps, left out of the CSV, with the reason. `Excluded` is `event` when the whole event was left out (for example, no primary-source announcement time) or `leak` when only the leak was left out (for example, an untimed leak) and the event uses its announcement time.
+Events, or leak timestamps, left out of the CSV, with the reason. `Excluded` is `event` when the whole event was left out (for example, the source gives only a date and the date alone cannot settle day 0) or `leak` when only the leak was left out (for example, an untimed leak) and the event uses its announcement time.
 
 | Event | Date | Excluded | Reason |
 |---|---|---|---|
