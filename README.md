@@ -2,6 +2,16 @@
 
 Measures stock market reactions to geopolitical events using a market-model event study, starting with OPEC+ decisions (XLE vs SPY).
 
+## Price data
+
+Prices are downloaded from Yahoo Finance once, into `data/prices/`, and then frozen: later runs reuse those files and never download again on their own. To refresh them, run:
+
+```
+uv run python scripts/run_opec.py --refresh
+```
+
+Refreshing can change results, because Yahoo adds new days and sometimes revises past adjusted prices. Each run writes `results/opec_run_info.json`, which records the data dates and the hashes of the prices used, so two runs can be checked for using the same data.
+
 ## Events CSV (`events/opec_events.csv`)
 
 One row per event. Fill it in from primary sources only.

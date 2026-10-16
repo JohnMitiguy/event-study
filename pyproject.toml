@@ -29,5 +29,5 @@ dev = [
 
 [tool.ruff.lint]
 ignore = [
-    "TRY004",  # All bad-input errors in this project are ValueError on purpose, so callers catch a single type.
+    "TRY004",  # Bad-input errors stay ValueError for consistency; data problems tied to one event raise EventDataError (a ValueError subclass), the only thing the runner catches.
 ]

@@ -25,7 +25,7 @@ Decision: The per-event test statistic is CAR divided by residual std times the 
 
 Decision: The test statistic is accepted only if a 1000-event simulation with no planted effect gives a mean near 0, a standard deviation between 0.9 and 1.15, and 3 to 8 percent of statistics beyond ±1.96, for both windows. Reason: a statistic that fires too often on pure noise would flatter every real result, and the check uses simulated normal noise, so real returns with fatter tails may behave somewhat worse.
 
-Decision: All bad-input errors raise ValueError, including a wrong index type, and Ruff’s TRY004 rule is ignored. Reason: one exception type lets the runner catch and log any bad event without stopping the run.
+Bad-input errors raise ValueError, and Ruff’s TRY004 rule is ignored; data problems tied to one event raise EventDataError, a subclass the runner alone catches. Reason: a single base type keeps error handling consistent, and catching only the subclass means a bug elsewhere that raises ValueError stops the run instead of showing up as one more failed event.
 
 Decision: The events loader is strict and rejects the whole file with every bad row listed, while the runner records a per-event error and continues. Reason: a bad CSV is a data-entry mistake you should fix, but an event with too little price history is a legitimate result to report.
 
