@@ -9,7 +9,8 @@ Last updated: 2026-10-16
 - Event day 0 logic (actual closes, early closes, weekends, holidays) and trading-day windows.
 - Market model (OLS with intercept), abnormal returns, CARs and per-event test statistics, calibrated on simulated no-effect events.
 - Runner that runs every event, records failed events with reasons, and reports estimation-window overlap and nearby events.
-- Across-event tests in `aggregate.py`: cross-sectional t, standardized-CAR (BMP), Wilcoxon and sign test. A power analysis is in `scripts/across_event_demo.py`.
+- Across-event tests in `aggregate.py`: cross-sectional t, standardized-CAR (BMP), Wilcoxon and sign test. A simulated power analysis is in `scripts/across_event_demo.py`, which also prints a formula-based count of events needed for 80% power: 26 ok events on [-1,+1], assuming a 1% day-0 abnormal return and 1% daily residual noise (10 on [0,0], 89 on [-5,+5]). That is an illustration, not a recorded target.
+- Methodology-reviewer Bash hook in `.claude/hooks/reviewer_bash_guard.py`: an allowlist of commands and, for each, the flags it may take; pytest file arguments limited to `tests/`. Tested in `tests/test_reviewer_hook.py`. It is a backstop and fails open if it can't start.
 - `scripts/run_opec.py`: the OPEC+ run (XLE vs SPY), writing results, run info and a per-event chart. `--official-time` uses official announcement times and writes to separate `*_official_time` files.
 - Tests (including property-based and fuzz tests), Ruff, and CI.
 
@@ -28,3 +29,4 @@ Last updated: 2026-10-16
 3. Fill the full OPEC+ list in `events/opec_events.csv`.
 4. Call the across-event tests from `run_opec.py` (needs at least 5 events with status "ok").
 5. Robustness runs: official-time (the `--official-time` flag exists, but the run hasn't been done), outlier exclusion, Saudi subsample, Brent.
+6. Decide whether to record a power target in DECISIONS.md (the user's call). Until then `/check-results` reports ok counts but does not judge power.

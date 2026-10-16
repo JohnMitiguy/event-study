@@ -1,5 +1,5 @@
 ---
-description: Check every DECISIONS.md entry against the code, by the read-only methodology-reviewer subagent
+description: Check every DECISIONS.md entry against the code, by the methodology-reviewer subagent (restricted by its instructions and a hook)
 disable-model-invocation: true
 ---
 

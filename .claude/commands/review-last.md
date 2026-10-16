@@ -1,5 +1,5 @@
 ---
-description: Methodology review of the last commit, by the read-only methodology-reviewer subagent
+description: Methodology review of the last commit, by the methodology-reviewer subagent (restricted by its instructions and a hook)
 disable-model-invocation: true
 ---
 

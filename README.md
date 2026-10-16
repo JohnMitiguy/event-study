@@ -42,7 +42,7 @@ The first run of `run_opec.py` downloads prices from Yahoo Finance into `data/pr
 
 ## Methodology reviewer (Claude Code)
 
-`.claude/agents/methodology-reviewer.md` is a read-only Claude Code subagent that hunts for look-ahead bias, window errors, overlap, thin samples, silent failures and code that disagrees with DECISIONS.md. It never edits files; it suggests DECISIONS.md lines for you to add. Its shell access is limited by a hook to `git log`, `git diff`, `git status`, `uv run pytest` and `uv run ruff check`, and it has no web access. Run it from Claude Code with:
+`.claude/agents/methodology-reviewer.md` is a Claude Code subagent that hunts for look-ahead bias, window errors, overlap, thin samples, silent failures and code that disagrees with DECISIONS.md. It suggests DECISIONS.md lines for you to add rather than editing anything. It has no edit tools and no web access, and two things restrict what it does: its instructions, which tell it never to change files, and a hook (`.claude/hooks/reviewer_bash_guard.py`, tested in `tests/test_reviewer_hook.py`) that lets its shell run only `git log`, `git diff`, `git status`, `uv run pytest` and `uv run ruff check`, each with a short list of allowed flags. The hook is a backstop, not a guarantee: it blocks anything else it sees, but if it can't start (for example, uv is not installed), Claude Code lets the command run anyway. pytest and ruff also still write their own cache folders. Run it from Claude Code with:
 
 - `/review-last`: the last commit. Did methodology change without a DECISIONS.md entry, and do tests cover it?
 - `/audit-decisions`: every DECISIONS.md entry checked against the code.

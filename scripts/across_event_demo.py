@@ -20,6 +20,11 @@ default estimation window, and the [-1,+1] event window throughout.
 (c) Power: a true abnormal return of 0% to 3% planted on day 0 of every
     event; rejection rate for N = 15, 30 and 60.
 
+Before the simulations it prints a quick formula-based count of the events
+needed for 80% power at a 1% average abnormal return and 1% daily noise,
+with its assumptions (see events_needed). It is an illustration, not a
+recorded target.
+
 Saves charts/across_event_null.png and charts/power_curve.png and prints the
 numbers behind both.
 
@@ -35,6 +40,7 @@ draws and differ only in what was changed. This makes the comparisons less
 noisy; each rate is still from N_REPS independent samples.
 """
 
+import math
 from pathlib import Path
 
 import matplotlib
@@ -45,6 +51,7 @@ import matplotlib.pyplot as plt
 import numpy as np
 import pandas as pd
 from scipy import stats
+from statsmodels.stats.power import TTestPower
 
 from event_study.aggregate import TEST_NAMES, compute_tests
 from event_study.simulate import (
@@ -71,6 +78,11 @@ EVENT_VOL_MULTIPLIER = 2.0
 EFFECTS = np.round(np.arange(0, 13) * 0.0025, 4)
 SEED = 2027
 CHECK_EVENTS = 50  # events in the check against null_test_stats
+# Assumptions for the formula-based events-needed count (events_needed).
+TARGET_POWER = 0.80
+ASSUMED_EFFECT = 0.01  # true average abnormal return, all of it on day 0
+ASSUMED_DAILY_STD = 0.01  # residual (abnormal-return) std per day
+SENSITIVITY_WINDOWS = ((0, 0), (-5, 5))
 
 NAIVE = "naive_z"
 LABELS = {
@@ -140,6 +152,45 @@ def simulate_cars(
     cars = abnormal.sum(axis=1)
     scars = cars / (resid_std * np.sqrt(len(window_rows)))
     return cars, scars
+
+
+def events_needed(window: tuple[int, int]) -> int:
+    """Ok events needed for TARGET_POWER at LEVEL, from a formula, not simulation.
+
+    Assumes every event has a true abnormal return of ASSUMED_EFFECT on day 0
+    and residual noise with std ASSUMED_DAILY_STD per day, independent across
+    days. A CAR over L days then has mean ASSUMED_EFFECT and std
+    ASSUMED_DAILY_STD * sqrt(L), so longer windows add noise but no effect.
+    The test is the two-sided one-sample t-test on the CARs (the
+    cross-sectional t, the primary test in DECISIONS.md).
+
+    Ignores estimation error in alpha and beta, effects that differ from
+    event to event, and events that share days. Each of these pushes the
+    real number up.
+    """
+    start, end = window
+    car_std = ASSUMED_DAILY_STD * math.sqrt(end - start + 1)
+    # effect_size is the true mean CAR divided by the CAR std. solve_power
+    # uses the exact t distribution and returns a fractional N; round up.
+    n = TTestPower().solve_power(
+        effect_size=ASSUMED_EFFECT / car_std, alpha=LEVEL, power=TARGET_POWER,
+        alternative="two-sided",
+    )
+    return math.ceil(n)
+
+
+def print_events_needed() -> None:
+    """The events_needed count for WINDOW, its assumptions, and other windows for comparison."""
+    print(f"Events needed for {TARGET_POWER:.0%} power (formula, not simulation; an illustration, "
+          "not a recorded target):")
+    print(f"  Assumes a true abnormal return of {ASSUMED_EFFECT:.0%} on day 0 of every event, "
+          f"residual std {ASSUMED_DAILY_STD:.0%}/day independent across days,")
+    print(f"  and a two-sided cross-sectional t-test at {LEVEL:.0%}. Ignores estimation error, "
+          "effects that vary between events and events that share days;")
+    print("  each pushes the number up.")
+    print(f"  {window_label(WINDOW)} window: {events_needed(WINDOW)} ok events.")
+    others = ", ".join(f"{window_label(w)} needs {events_needed(w)}" for w in SENSITIVITY_WINDOWS)
+    print(f"  Same assumptions, other windows: {others}.\n")
 
 
 def check_against_pipeline() -> None:
@@ -281,6 +332,7 @@ def plot_power(power: dict[int, pd.DataFrame], path: Path) -> None:
 
 
 def main() -> None:
+    print_events_needed()
     check_against_pipeline()
     print(f"{N_REPS} simulated samples per row; rejection rates in % at the 5% level.")
     print(f"A correctly sized test lands within 5% +/- {monte_carlo_band():.1%} about 95% of the time.\n")
