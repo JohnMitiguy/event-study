@@ -18,3 +18,7 @@ Decision: A row needs a primary-source announcement time, and events without one
 Decision: Saudi unilateral decisions are logged with a decision_group tag and reported as a separate subsample, not averaged into the main result. Reason: they are a different kind of shock from group decisions, and a blended average would describe neither.
 
 Decision: An event with a leak known only by date uses the official announcement time and is logged in the README with a note, not dropped. Reason: dropping it would silently shrink the sample, and the official time is the conservative fallback.
+
+Decision: The market model is an OLS regression of security returns on benchmark returns with an intercept, using the estimation window only, with residual variance computed on n-2 degrees of freedom. Reason: it is the standard specification, and the n-2 divisor reflects the two estimated parameters.
+
+Decision: The per-event test statistic is CAR divided by residual std times the square root of window length, ignoring estimation error in alpha and beta; headline inference comes from the across-event test. Reason: with 120 observations the omitted error is small (about 3% of variance for a 3-day window, 10% for an 11-day one), and the cross-event test handles event-induced volatility better.
