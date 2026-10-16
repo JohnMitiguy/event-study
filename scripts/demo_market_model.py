@@ -28,13 +28,13 @@ from event_study.simulate import (
     PLANTED_JUMP,
     TRUE_BETA,
     planted_event,
-    window_label,
 )
 from event_study.windows import (
     DEFAULT_EST_LENGTH,
     DEFAULT_EVENT_WINDOWS,
     DEFAULT_GAP,
     slice_windows,
+    window_label,
 )
 
 OUTPUT = Path("charts") / "market_model_demo.png"

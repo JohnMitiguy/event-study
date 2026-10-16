@@ -25,6 +25,12 @@ DEFAULT_GAP = 10
 DEFAULT_EVENT_WINDOWS = ((-1, 1), (-5, 5))
 
 
+def window_label(window: tuple[int, int]) -> str:
+    """(-1, 1) -> "[-1,+1]". Used as a column name and in printouts."""
+    start, end = window
+    return f"[{start:+d},{end:+d}]"
+
+
 def _check_index(returns: pd.Series) -> None:
     """Raise ValueError unless the index is a tz-naive, sorted, unique DatetimeIndex.
 

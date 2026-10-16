@@ -23,13 +23,13 @@ from event_study.simulate import (
     TRUE_BETA,
     null_test_stats,
     planted_event,
-    window_label,
 )
 from event_study.windows import (
     DEFAULT_EST_LENGTH,
     DEFAULT_EVENT_WINDOWS,
     DEFAULT_GAP,
     slice_windows,
+    window_label,
 )
 
 

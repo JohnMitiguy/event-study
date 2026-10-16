@@ -1,0 +1,1 @@
+event_id,decision_group,direction,surprise_flag,event_time,used_leak,day0,alpha,beta,resid_std,n,"car_[-1,+1]","t_[-1,+1]","car_[-5,+5]","t_[-5,+5]",est_overlap_days,nearby_events,error

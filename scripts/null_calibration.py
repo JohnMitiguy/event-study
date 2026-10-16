@@ -31,9 +31,13 @@ from event_study.simulate import (
     NULL_MASTER_SEED,
     TRUE_BETA,
     null_test_stats,
+)
+from event_study.windows import (
+    DEFAULT_EST_LENGTH,
+    DEFAULT_EVENT_WINDOWS,
+    DEFAULT_GAP,
     window_label,
 )
-from event_study.windows import DEFAULT_EST_LENGTH, DEFAULT_EVENT_WINDOWS, DEFAULT_GAP
 
 N_EVENTS = 1000
 CRITICAL = 1.96  # two-sided 5% cutoff for a standard normal

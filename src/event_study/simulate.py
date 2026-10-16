@@ -15,7 +15,7 @@ import numpy as np
 import pandas as pd
 
 from event_study.market_model import car_test, fit_market_model
-from event_study.windows import slice_windows
+from event_study.windows import slice_windows, window_label
 
 TRUE_ALPHA = 0.0
 TRUE_BETA = 1.2
@@ -64,12 +64,6 @@ def planted_event(
     security, benchmark = fake_returns(np.random.default_rng(seed))
     security.iloc[DAY0_POSITION] += jump
     return security, benchmark, security.index[DAY0_POSITION]
-
-
-def window_label(window: tuple[int, int]) -> str:
-    """(-1, 1) -> "[-1,+1]". Used as a column name and in printouts."""
-    start, end = window
-    return f"[{start:+d},{end:+d}]"
 
 
 def null_test_stats(
