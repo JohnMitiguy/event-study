@@ -30,7 +30,7 @@ Decision: An event is a formal group-level OPEC+ production decision, including 
 
 Decision: Each event carries a decision_group of ministerial (a full OPEC+ ministerial meeting), voluntary_group (the subset making voluntary adjustments) or saudi_unilateral (an action by Saudi Arabia alone); Saudi unilateral events are reported as a separate subsample, not averaged into the main result. Reason: they are a different kind of shock from group decisions, and a blended average would describe neither.
 
-Decision: A row needs a primary-source announcement time, and events without one are left out and listed with reasons in the README. Reason: guessing the time can shift day 0 by a day, and silently dropping events would be an undisclosed selection effect.
+Decision: A row needs an announcement time precise enough to place the event against the close. When the source gives only a date, the row is kept with a representative time and a note explaining why every plausible time gives the same day 0; events where the date alone cannot settle day 0 are excluded and listed with reasons in the README. Leak times must be exact and come from a timestamped source. Reason: requiring exact times would drop most events and bias the sample, while day 0 only depends on the time when the announcement falls near the close.
 
 Decision: An event with a leak known only by date uses the official announcement time and is logged in the README with a note, not dropped. Reason: dropping it would silently shrink the sample, and the official time is the conservative fallback.
 
