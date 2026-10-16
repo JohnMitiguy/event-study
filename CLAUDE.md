@@ -10,6 +10,7 @@ Read DECISIONS.md before changing any methodology.
 ## Method conventions
 - Simple daily returns from adjusted close.
 - Event day 0 = first trading day the market could react (after 4pm ET, weekends, holidays roll forward).
+- Event time = leak_datetime_et if present, else announcement_datetime_et. Day 0 is computed from event time. Untimed leaks are not used.
 - Windows count trading days, never calendar days.
 - Estimation window must end before the event window starts. No look-ahead.
 - Estimation length, gap, and event windows are parameters, never hardcoded.
