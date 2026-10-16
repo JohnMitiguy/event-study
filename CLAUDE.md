@@ -14,6 +14,7 @@ Read DECISIONS.md before changing any methodology.
 - Windows count trading days, never calendar days.
 - Estimation window must end before the event window starts. No look-ahead.
 - Estimation length, gap, and event windows are parameters, never hardcoded.
+- Any averaging across events must count N from status "ok" only and report every excluded event with its reason.
 
 ## Working rules
 - The user is new to pandas. Keep functions small, put assumptions in docstrings, explain anything non-obvious.

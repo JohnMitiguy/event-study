@@ -2,12 +2,17 @@
 
 Run from the project root (the price cache lives at the relative path data/):
 
-    uv run python scripts/plot_prices.py
+    uv run python scripts/plot_prices.py            # use the cached prices as they are
+    uv run python scripts/plot_prices.py --refresh  # re-download prices first
+
+Nothing is downloaded unless a cache file is missing or --refresh is passed,
+so this script never changes the data scripts/run_opec.py uses by accident.
 
 Prints the NYSE trading-day check for each ticker, then saves
 charts/xle_vs_spy.png. A failed check is printed but does not stop the chart.
 """
 
+import argparse
 from datetime import datetime
 from pathlib import Path
 
@@ -19,10 +24,9 @@ import matplotlib.pyplot as plt
 import pandas as pd
 
 from event_study.event_days import check_trading_days
-from event_study.prices import cache_path, load_prices, today_eastern
+from event_study.prices import cache_path, load_cached
 
 TICKERS = ["XLE", "SPY"]
-START = "2010-01-01"
 OUTPUT = Path("charts") / "xle_vs_spy.png"
 
 # Line colors: the first two slots of the colorblind-checked default palette.
@@ -50,18 +54,28 @@ def report_trading_days(ticker: str, prices: pd.Series) -> None:
 def download_date(ticker: str) -> str:
     """Date the cached CSV was last written, i.e. when yfinance was last called.
 
-    The loader reuses the cache when it is fresh enough, so this can be
-    earlier than today.
+    The cache is reused until --refresh is passed, so this can be well
+    before today.
     """
     modified = cache_path(ticker).stat().st_mtime
     return datetime.fromtimestamp(modified).date().isoformat()
 
 
+def parse_args() -> argparse.Namespace:
+    parser = argparse.ArgumentParser(description="Plot XLE vs SPY total return.")
+    parser.add_argument(
+        "--refresh",
+        action="store_true",
+        help="re-download XLE and SPY prices first (otherwise the cache is used as is)",
+    )
+    return parser.parse_args()
+
+
 def main() -> None:
-    # 1. Load prices. `end` is exclusive, so end=today gives data up to the
-    #    last completed trading day and never today's unfinished bar.
-    end = today_eastern().isoformat()
-    prices = {ticker: load_prices(ticker, START, end) for ticker in TICKERS}
+    args = parse_args()
+    # 1. Load prices: the whole cache, which starts at prices.CACHE_START
+    #    (2010-01-01). Downloaded only if missing or with --refresh.
+    prices = {ticker: load_cached(ticker, refresh=args.refresh) for ticker in TICKERS}
 
     # 2. Check each ticker's dates against the NYSE calendar.
     for ticker in TICKERS:

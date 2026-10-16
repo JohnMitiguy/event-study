@@ -4,6 +4,7 @@ import numpy as np
 import pandas as pd
 import pytest
 
+from event_study.errors import EventDataError
 from event_study.windows import slice_windows
 
 # 20 business days, positions 0..19:
@@ -112,3 +113,58 @@ def test_non_datetime_index_raises(returns):
 def test_start_after_end_window_raises(returns):
     with pytest.raises(ValueError, match="start after end"):
         slice_windows(returns, "2024-01-16", est_length=3, gap=2, event_windows=((1, -1),))
+
+
+# --- Look-ahead (item 2 of the review) -----------------------------------------
+
+
+def test_gap_zero_with_post_event_window_raises(returns):
+    # Without the gap rule, estimation would end on day 0 itself.
+    with pytest.raises(ValueError, match="gap must be at least 1"):
+        slice_windows(returns, "2024-01-16", est_length=3, gap=0, event_windows=((1, 5),))
+
+
+def test_negative_gap_with_late_window_raises(returns):
+    # Without the gap rule, estimation would run through day +3.
+    with pytest.raises(ValueError, match="gap must be at least 1"):
+        slice_windows(returns, "2024-01-16", est_length=3, gap=-3, event_windows=((5, 8),))
+
+
+def test_look_ahead_is_a_parameter_error_even_without_enough_data(returns):
+    # Jan 04 lacks history for the estimation window (an EventDataError), but
+    # the look-ahead problem is found first and is a plain ValueError, so it
+    # stops a run instead of failing one event.
+    with pytest.raises(ValueError, match="increase gap") as info:
+        slice_windows(returns, "2024-01-04", est_length=3, gap=2, event_windows=((-2, 2),))
+    assert not isinstance(info.value, EventDataError)
+
+
+# --- Error types (item 4) ------------------------------------------------------
+
+
+@pytest.mark.parametrize(
+    "day0, match",
+    [
+        ("2024-01-13", "not in the returns index"),  # Saturday
+        ("2024-01-04", "estimation window needs"),
+        ("2024-01-29", "runs outside the series"),
+    ],
+)
+def test_event_data_problems_raise_event_data_error(returns, day0, match):
+    with pytest.raises(EventDataError, match=match):
+        slice_windows(returns, day0, est_length=3, gap=2, event_windows=((-1, 1),))
+
+
+@pytest.mark.parametrize(
+    "make_bad",
+    [
+        lambda r: r.iloc[::-1],  # unsorted
+        lambda r: pd.concat([r, r.iloc[[3]]]).sort_index(),  # duplicate date
+        lambda r: r.tz_localize("UTC"),  # tz-aware
+    ],
+    ids=["unsorted", "duplicate", "tz-aware"],
+)
+def test_index_problems_are_plain_value_errors(returns, make_bad):
+    with pytest.raises(ValueError) as info:
+        slice_windows(make_bad(returns), "2024-01-16", est_length=3, gap=2)
+    assert not isinstance(info.value, EventDataError)

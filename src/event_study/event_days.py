@@ -92,6 +92,24 @@ def event_day_zero(announced_at: datetime) -> pd.Timestamp:
     return cal.date_to_session(day, direction="next")
 
 
+def session_position(day: pd.Timestamp) -> int:
+    """Row number of `day` in the NYSE session list (CALENDAR_START onward).
+
+    Differences between positions count trading days, with no price data
+    needed, so an event can be placed even when its dates are outside the
+    downloaded data. `day` must be a tz-naive session date; a weekend,
+    holiday, or date outside the calendar raises ValueError.
+    """
+    ts = pd.Timestamp(day)
+    sessions = nyse_calendar().sessions
+    if ts not in sessions:
+        raise ValueError(
+            f"{ts.date()} is not an NYSE session between "
+            f"{sessions[0].date()} and {sessions[-1].date()}"
+        )
+    return sessions.get_loc(ts)
+
+
 def check_trading_days(returns: pd.Series) -> None:
     """Raise ValueError unless the index has exactly the NYSE sessions
     between its own first and last dates.

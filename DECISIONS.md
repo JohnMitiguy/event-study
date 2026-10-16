@@ -30,3 +30,9 @@ Decision: All bad-input errors raise ValueError, including a wrong index type, a
 Decision: The events loader is strict and rejects the whole file with every bad row listed, while the runner records a per-event error and continues. Reason: a bad CSV is a data-entry mistake you should fix, but an event with too little price history is a legitimate result to report.
 
 Decision: The first version of the runner reports overlap diagnostics per event and applies no exclusions, and the treatment of overlapping estimation windows is decided after the pilot, before the full sample is run. Reason: with a handful of events overlap is rare, and seeing the diagnostics on the real list is better than guessing a rule.
+
+Decision: Results come from a frozen price snapshot that is refreshed only on request, and each run records the data dates and a hash of the prices used. Reason: Yahoo revises adjusted prices, so an automatic refresh could change a CAR between runs with no record of why.
+
+Decision: The estimation window must end before day 0 and before the start of every event window, so the gap is at least 1. Reason: otherwise a post-event window with a small gap would fit the model on the event’s own reaction.
+
+Decision: Data problems tied to one event raise EventDataError, a subclass of ValueError, and the runner catches only that. Reason: a bug inside a library that happens to raise ValueError should stop the run instead of showing up as one more failed event.

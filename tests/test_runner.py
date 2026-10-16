@@ -4,6 +4,7 @@ Event rows are fake. Dates are rows of the simulated index, so day 0 is
 always a date the data has unless a test says otherwise.
 """
 
+import numpy as np
 import pandas as pd
 import pytest
 
@@ -11,10 +12,13 @@ import pytest
 # from test_events.py can be imported by module name.
 from test_events import valid_row, write_events
 
+from event_study.errors import EventDataError
+from event_study.event_days import nyse_calendar
 from event_study.events import load_events
 from event_study.market_model import abnormal_returns, car_test, fit_market_model
 from event_study.runner import (
     CARRIED_COLUMNS,
+    events_needing_later_data,
     overlap_diagnostics,
     result_columns,
     run_events,
@@ -71,6 +75,7 @@ def test_matches_direct_pipeline(sim):
     assert list(abnormal.columns) == list(range(-5, 6))
     assert abnormal.loc["test_event_0"].tolist() == pytest.approx(direct_abnormal.tolist())
     assert pd.isna(row["error"])
+    assert row["status"] == "ok"
 
 
 def test_planted_jump_is_detected(sim):
@@ -84,7 +89,9 @@ def test_failures_are_recorded_and_others_still_run(sim):
     events = make_events(
         [
             day0,
-            pd.Timestamp("2030-01-02"),  # not in the data
+            # Not in the data. It must be an NYSE session inside the calendar
+            # (which ends about a year after today) for the overlap counts.
+            pd.Timestamp("2025-01-02"),
             security.index[50],  # needs 129 rows of history, has 50
         ],
         ids=["good", "missing_day0", "too_early"],
@@ -92,6 +99,7 @@ def test_failures_are_recorded_and_others_still_run(sim):
     results, abnormal = run_events(events, security, benchmark)
 
     assert results["error"].notna().sum() == 2
+    assert results["status"].tolist() == ["ok", "failed", "failed"]
     by_id = results.set_index("event_id")
     assert pd.isna(by_id.loc["good", "error"])
     assert "not in the returns index" in by_id.loc["missing_day0", "error"]
@@ -99,8 +107,37 @@ def test_failures_are_recorded_and_others_still_run(sim):
     assert pd.isna(by_id.loc["too_early", "beta"])
     assert pd.isna(by_id.loc["too_early", "n"])
     # Day 0 is kept for failed events.
-    assert by_id.loc["missing_day0", "day0"] == pd.Timestamp("2030-01-02")
+    assert by_id.loc["missing_day0", "day0"] == pd.Timestamp("2025-01-02")
     assert list(abnormal.index) == ["good"]
+
+
+def test_nan_in_one_event_is_recorded_as_failed(sim):
+    security, benchmark, day0 = sim
+    security = security.copy()
+    security.loc[day0] = np.nan
+    # Row 140: estimation 11..130 and widest window 135..145 miss row 150.
+    other = security.index[DAY0_POSITION - 10]
+    results, _ = run_events(make_events([day0, other], ids=["nan", "fine"]), security, benchmark)
+    by_id = results.set_index("event_id")
+    assert by_id.loc["nan", "status"] == "failed"
+    assert "NaN or infinite" in by_id.loc["nan", "error"]
+    assert by_id.loc["fine", "status"] == "ok"
+
+
+def test_plain_value_error_stops_the_run(sim):
+    # A bad parameter is a problem with the whole run, not one event.
+    security, benchmark, day0 = sim
+    with pytest.raises(ValueError, match="gap must be at least 1") as info:
+        run_events(make_events([day0]), security, benchmark, gap=0)
+    assert not isinstance(info.value, EventDataError)
+
+
+def test_broken_index_stops_the_run(sim):
+    security, benchmark, day0 = sim
+    duplicated = pd.concat([security, security.iloc[[10]]]).sort_index()
+    with pytest.raises(ValueError, match="duplicate dates") as info:
+        run_events(make_events([day0]), duplicated, benchmark)
+    assert not isinstance(info.value, EventDataError)
 
 
 def test_carried_columns_keep_values_and_types(sim):
@@ -154,19 +191,21 @@ def test_duplicate_event_id_raises(sim):
 
 # --- Overlap diagnostics ------------------------------------------------------
 
+# Real NYSE sessions, since the diagnostics count session positions.
+# SESSIONS[k] is k sessions after 2023-01-03.
+SESSIONS = nyse_calendar().sessions_in_range("2023-01-03", "2025-12-31")
 
-def diagnostics_for(positions, index_length=300):
-    """Diagnostics with default windows for events at these row positions.
 
-    None stands for a day 0 that is not in the index.
-    """
-    index = pd.bdate_range("2024-01-01", periods=index_length)
-    day0s = pd.Series(
-        [pd.Timestamp("2030-01-02") if p is None else index[p] for p in positions]
-    )
+def diagnostics(day0s):
+    """Diagnostics with the default estimation length, gap and windows."""
     return overlap_diagnostics(
-        index, day0s, DEFAULT_EST_LENGTH, DEFAULT_GAP, DEFAULT_EVENT_WINDOWS
+        pd.Series(day0s), DEFAULT_EST_LENGTH, DEFAULT_GAP, DEFAULT_EVENT_WINDOWS
     )
+
+
+def diagnostics_for(positions):
+    """Diagnostics for events at these positions in SESSIONS."""
+    return diagnostics([SESSIONS[p] for p in positions])
 
 
 def test_overlap_counts():
@@ -189,10 +228,34 @@ def test_same_day_events_are_nearby():
     assert diag["est_overlap_days"].tolist() == [0, 0]
 
 
-def test_day0_not_in_index_is_na_and_ignored():
-    diag = diagnostics_for([150, None, 130])
-    assert diag.loc[1].isna().all()
-    assert diag.loc[0].tolist() == [11, 0]
+def test_event_after_the_data_end_still_counts():
+    # Data is SESSIONS[0..199]. A's day 0 is row 197, so its widest window is
+    # 192..202 and runs past the data. B's day 0 is two sessions after the
+    # last row (position 201): widest window 196..206. They share 196..202.
+    data = SESSIONS[:200]
+    a, b = data[197], SESSIONS[201]
+    assert b not in data
+    diag = diagnostics([a, b])
+    assert diag["nearby_events"].tolist() == [1, 1]
+    # A's estimation window ends at 187, B's at 191: neither reaches 192.
+    assert diag["est_overlap_days"].tolist() == [0, 0]
+
+
+def test_event_before_the_data_start_still_counts():
+    # Data starts at SESSIONS[10]. B's day 0 is SESSIONS[9], one session
+    # before the first row: widest window 4..14. A is data row 129
+    # (SESSIONS[139]): estimation window 10..129, which holds B's 10..14.
+    data = SESSIONS[10:310]
+    a, b = data[129], SESSIONS[9]
+    assert b not in data
+    diag = diagnostics([a, b])
+    assert diag.loc[0].tolist() == [5, 0]
+    assert diag.loc[1].tolist() == [0, 0]
+
+
+def test_non_session_day0_raises():
+    with pytest.raises(ValueError, match="not an NYSE session"):
+        diagnostics([pd.Timestamp("2024-07-04")])  # Independence Day
 
 
 def test_overlap_columns_in_results(sim):
@@ -201,6 +264,29 @@ def test_overlap_columns_in_results(sim):
     results, _ = run_events(events, security, benchmark)
     assert results["nearby_events"].tolist() == [1, 1]
     assert results["est_overlap_days"].dtype == "Int64"
+
+
+# --- Data coverage ------------------------------------------------------------
+
+
+def test_events_needing_later_data_uses_widest_end():
+    last = SESSIONS[200]
+    events = make_events([SESSIONS[195], SESSIONS[196]], ids=["fits", "too_late"])
+    # Widest end +5: 195 + 5 = 200 is the last data day; 196 + 5 is not.
+    assert events_needing_later_data(events, last, DEFAULT_EVENT_WINDOWS) == ["too_late"]
+    # Widest end +3: both end on or before 200.
+    assert events_needing_later_data(events, last, ((-1, 1), (0, 3))) == []
+    # Widest end +8: both run past it.
+    assert events_needing_later_data(events, last, ((-1, 8),)) == ["fits", "too_late"]
+
+
+def test_events_needing_later_data_counts_sessions_not_calendar_days():
+    # 2024-07-03 + 1 session is 2024-07-05 (July 4 is a holiday).
+    events = make_events([pd.Timestamp("2024-07-03")])
+    assert events_needing_later_data(events, pd.Timestamp("2024-07-05"), ((0, 1),)) == []
+    assert events_needing_later_data(events, pd.Timestamp("2024-07-03"), ((0, 1),)) == [
+        "test_event_0"
+    ]
 
 
 # --- End to end ---------------------------------------------------------------

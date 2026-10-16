@@ -25,6 +25,10 @@ Assumptions:
   identical indexes (same dates, same order); nothing is re-aligned here.
 - Missing or infinite returns raise rather than being dropped, so a fit never
   quietly uses fewer days than the caller thinks.
+
+Errors: problems with one event's data (mismatched dates, NaN/inf, too few
+days, a perfect fit) raise EventDataError. Other bad input (min_obs below 3,
+empty series, a constant benchmark) raises plain ValueError.
 """
 
 from dataclasses import dataclass
@@ -33,9 +37,18 @@ import numpy as np
 import pandas as pd
 import statsmodels.api as sm
 
+from event_study.errors import EventDataError
+
 # n - 2 must be at least 1 to compute the residual standard deviation
 # (two parameters, alpha and beta, are estimated from n days).
 HARD_MIN_OBS = 3
+
+# A residual std this small means the security is (almost) an exact linear
+# function of the benchmark, e.g. the same series passed twice. The test
+# statistic divides by resid_std, so it would blow up. Absolute floor, and a
+# floor relative to the security's own day-to-day spread.
+MIN_RESID_STD = 1e-10
+MIN_RESID_STD_RATIO = 1e-6
 
 
 @dataclass(frozen=True)
@@ -67,7 +80,7 @@ def _first_label(index: pd.Index, mask: np.ndarray) -> str:
 
 
 def _check_same_dates(security: pd.Series, benchmark: pd.Series) -> None:
-    """Raise ValueError unless both indexes hold the same dates in the same order.
+    """Raise EventDataError unless both indexes hold the same dates in the same order.
 
     Index.equals compares element by element, so it also catches the same
     dates in a different order (which would pair the wrong days).
@@ -77,7 +90,7 @@ def _check_same_dates(security: pd.Series, benchmark: pd.Series) -> None:
     only_security = security.index.difference(benchmark.index)
     only_benchmark = benchmark.index.difference(security.index)
     if len(only_security) == 0 and len(only_benchmark) == 0:
-        raise ValueError(
+        raise EventDataError(
             "security and benchmark have the same dates but in a different order "
             "(or with different duplicates); they must match row for row"
         )
@@ -86,18 +99,18 @@ def _check_same_dates(security: pd.Series, benchmark: pd.Series) -> None:
         parts.append(f"{len(only_security)} date(s) only in security (first {only_security[0]})")
     if len(only_benchmark) > 0:
         parts.append(f"{len(only_benchmark)} date(s) only in benchmark (first {only_benchmark[0]})")
-    raise ValueError("security and benchmark must share the same dates: " + "; ".join(parts))
+    raise EventDataError("security and benchmark must share the same dates: " + "; ".join(parts))
 
 
 def _check_finite(series: pd.Series, name: str) -> None:
-    """Raise ValueError if series has any NaN or +/-inf value.
+    """Raise EventDataError if series has any NaN or +/-inf value.
 
     np.isfinite is False for NaN, inf and -inf. An inf return would come from
     a zero price, so it is treated as bad data just like a missing one.
     """
     bad = ~np.isfinite(series.to_numpy(dtype=float))
     if bad.any():
-        raise ValueError(
+        raise EventDataError(
             f"{name} has {bad.sum()} NaN or infinite value(s), "
             f"first on {_first_label(series.index, bad)}"
         )
@@ -112,6 +125,22 @@ def _check_pair(security: pd.Series, benchmark: pd.Series) -> None:
     _check_finite(benchmark, "benchmark")
 
 
+def _check_not_perfect_fit(resid_std: float, security: pd.Series) -> None:
+    """Raise EventDataError if the fit leaves (almost) no residual.
+
+    security.std() is the sample std of the estimation-window returns. Real
+    daily residuals are around 1e-2, nowhere near these floors, so hitting
+    one means the inputs are degenerate.
+    """
+    floor = max(MIN_RESID_STD, MIN_RESID_STD_RATIO * float(security.std()))
+    if resid_std < floor:
+        raise EventDataError(
+            f"residual std {resid_std:.3g} is below {floor:.3g}: the security is an almost "
+            "exact linear function of the benchmark. Check that security and benchmark "
+            "aren't the same series."
+        )
+
+
 def fit_market_model(
     security: pd.Series, benchmark: pd.Series, min_obs: int
 ) -> MarketModelFit:
@@ -123,17 +152,20 @@ def fit_market_model(
     min_obs must be at least 3, the fewest days that leave a residual
     standard deviation to compute.
 
-    Raises ValueError if the dates differ, if either series is empty or has
-    NaN/inf, if there are fewer than min_obs days, or if the benchmark has
-    the same return every day (beta would be undefined: there is no benchmark
-    movement to measure the security's response against).
+    Raises EventDataError if the dates differ, either series has NaN/inf,
+    there are fewer than min_obs days, or the fit is perfect (residual std
+    below MIN_RESID_STD, or below MIN_RESID_STD_RATIO times the security's
+    std). Raises ValueError if min_obs is below 3, the series are empty, or
+    the benchmark has the same return every day (beta would be undefined:
+    there is no benchmark movement to measure the security's response
+    against).
     """
     if min_obs < HARD_MIN_OBS:
         raise ValueError(f"min_obs must be at least {HARD_MIN_OBS}, got {min_obs}")
     _check_pair(security, benchmark)
     n = len(security)
     if n < min_obs:
-        raise ValueError(f"only {n} observation(s) in the estimation window, need at least {min_obs}")
+        raise EventDataError(f"only {n} observation(s) in the estimation window, need at least {min_obs}")
     # Compare max and min rather than testing std() == 0: a constant series
     # can have a tiny nonzero std from floating-point rounding.
     if benchmark.max() == benchmark.min():
@@ -153,6 +185,7 @@ def fit_market_model(
     # same days, which makes the residuals a little smaller than the true
     # errors. n - 2 corrects for that. This equals statsmodels' mse_resid.
     resid_std = np.sqrt(result.ssr / (n - 2))
+    _check_not_perfect_fit(resid_std, security)
     return MarketModelFit(alpha=float(alpha), beta=float(beta), resid_std=float(resid_std), n=n)
 
 
@@ -162,7 +195,8 @@ def abnormal_returns(
     """Actual security return minus the model's prediction, one value per day.
 
     Prediction = alpha + beta * benchmark return that day. Pass event-window
-    slices. Raises ValueError under the same date and NaN/inf rules as the fit.
+    slices. Raises EventDataError under the same date and NaN/inf rules as
+    the fit.
     """
     _check_pair(security, benchmark)
     predicted = fit.alpha + fit.beta * benchmark

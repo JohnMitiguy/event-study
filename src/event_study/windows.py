@@ -13,11 +13,17 @@ Assumptions:
 - Every trading day has a row. If the data source dropped a day, positions
   shift silently; this module does not cross-check the exchange calendar.
 - NaN returns inside a window are passed through untouched.
+
+Errors: problems with one event's position in the data (day 0 missing, a
+window running off either end) raise EventDataError. A bad index or bad
+parameters raise plain ValueError.
 """
 
 from datetime import date
 
 import pandas as pd
+
+from event_study.errors import EventDataError
 
 # Defaults only. Every function takes these as parameters.
 DEFAULT_EST_LENGTH = 120
@@ -48,26 +54,43 @@ def _check_index(returns: pd.Series) -> None:
         raise ValueError("returns index has duplicate dates")
 
 
-def _check_params(est_length: int, event_windows) -> None:
+def _check_params(est_length: int, gap: int, event_windows) -> None:
+    """Raise ValueError for impossible or look-ahead parameters.
+
+    Look-ahead rules: the estimation window ends on day -gap, so
+    - gap >= 1 makes it end on day -1 or earlier, never on day 0 or later;
+    - -gap < start makes it end before each event window starts.
+    Both depend only on the parameters, so they are checked here, before any
+    data, and fail the same way for every event.
+    """
     if est_length < 1:
         raise ValueError(f"est_length must be at least 1, got {est_length}")
+    if gap < 1:
+        raise ValueError(
+            f"gap must be at least 1, got {gap}: the estimation window must end before day 0"
+        )
     for start, end in event_windows:
         if start > end:
             raise ValueError(f"event window ({start}, {end}) has start after end")
+        if -gap >= start:
+            raise ValueError(
+                f"estimation window ends on day {-gap}, which is on or after the "
+                f"start of event window ({start}, {end}); increase gap"
+            )
 
 
 def day_zero_position(returns: pd.Series, day0: date | pd.Timestamp) -> int:
     """Integer position of day0 in the returns index.
 
-    day0 must match an index date exactly; a missing date raises ValueError
-    rather than snapping to a neighbouring trading day. day0 must be tz-naive,
-    like the index.
+    day0 must match an index date exactly; a missing date raises
+    EventDataError rather than snapping to a neighbouring trading day. day0
+    must be tz-naive, like the index (a tz-aware day0 raises ValueError).
     """
     ts = pd.Timestamp(day0)
     if ts.tz is not None:
         raise ValueError(f"day0 {day0} must be tz-naive (a plain date), got time zone {ts.tz}")
     if ts not in returns.index:
-        raise ValueError(f"day0 {ts.date()} is not in the returns index")
+        raise EventDataError(f"day0 {ts.date()} is not in the returns index")
     return returns.index.get_loc(ts)
 
 
@@ -83,20 +106,21 @@ def slice_windows(
     Each window is a slice of `returns` with its original dates as the index.
     See the module docstring for which positions each window covers.
 
-    Raises ValueError if the index or parameters are invalid, day0 is not in
-    the index, the estimation window starts before the first row, an event
-    window runs outside the series, or the estimation window ends on or after
-    the first day of any event window (look-ahead).
+    Raises ValueError if the index or parameters are invalid (including
+    gap < 1), or if the estimation window ends on or after the first day of
+    any event window (look-ahead). Raises EventDataError if day0 is not in
+    the index, the estimation window starts before the first row, or an
+    event window runs outside the series.
     """
     _check_index(returns)
-    _check_params(est_length, event_windows)
+    _check_params(est_length, gap, event_windows)
     p = day_zero_position(returns, day0)
     n = len(returns)
 
     est_first = p - gap - est_length + 1
     est_last = p - gap
     if est_first < 0:
-        raise ValueError(
+        raise EventDataError(
             f"estimation window needs {-est_first} more row(s) before "
             f"{returns.index[0].date()} (first row)"
         )
@@ -105,14 +129,9 @@ def slice_windows(
     for start, end in event_windows:
         first, last = p + start, p + end
         if first < 0 or last >= n:
-            raise ValueError(
+            raise EventDataError(
                 f"event window ({start}, {end}) runs outside the series "
                 f"({returns.index[0].date()} to {returns.index[-1].date()})"
-            )
-        if est_last >= first:
-            raise ValueError(
-                f"estimation window ends on day {-gap}, which is on or after the "
-                f"start of event window ({start}, {end}); increase gap"
             )
         # iloc's end is exclusive, hence the + 1.
         event_slices[(start, end)] = returns.iloc[first : last + 1]

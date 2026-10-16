@@ -14,6 +14,7 @@ import numpy as np
 import pandas as pd
 import pytest
 
+from event_study.errors import EventDataError
 from event_study.market_model import MarketModelFit, car_test, fit_market_model
 from event_study.simulate import (
     NOISE_STD,
@@ -273,3 +274,88 @@ def test_null_std_near_one(null_stats, window):
 def test_null_rejection_rate_near_five_percent(null_stats, window):
     share = (null_stats[window_label(window)].abs() > 1.96).mean()
     assert 0.03 <= share <= 0.08
+
+
+# ---------------------------------------------------------------------------
+# Error types (item 4 of the review)
+# ---------------------------------------------------------------------------
+
+
+def _nan_first(pair):
+    security, benchmark = pair
+    security.iloc[0] = np.nan
+    return security, benchmark, 3
+
+
+@pytest.mark.parametrize(
+    "make_inputs, match",
+    [
+        (lambda p: (p[0], p[1].iloc[:-1], 3), "share the same dates"),
+        (lambda p: (p[0], p[1].iloc[::-1], 3), "different order"),
+        (_nan_first, "NaN or infinite"),
+        (lambda p: (p[0].iloc[1:], p[1].iloc[1:], DEFAULT_EST_LENGTH), "only 119 observation"),
+    ],
+    ids=["mismatched", "reordered", "nan", "too-few"],
+)
+def test_event_data_problems_raise_event_data_error(est_pair, make_inputs, match):
+    security, benchmark, min_obs = make_inputs(est_pair)
+    with pytest.raises(EventDataError, match=match):
+        fit_market_model(security, benchmark, min_obs=min_obs)
+
+
+def test_event_window_nan_raises_event_data_error(demo):
+    window = (-1, 1)
+    security = demo["sec_events"][window].copy()
+    security.iloc[1] = np.inf
+    with pytest.raises(EventDataError):
+        car_test(demo["fit"], security, demo["bench_events"][window])
+
+
+def _constant_benchmark(pair):
+    security, benchmark = pair
+    benchmark[:] = 0.001
+    return security, benchmark, 3
+
+
+@pytest.mark.parametrize(
+    "make_inputs, match",
+    [
+        (lambda p: (p[0].iloc[:2], p[1].iloc[:2], 2), "min_obs must be at least 3"),
+        (lambda p: (p[0].iloc[:0], p[1].iloc[:0], 3), "empty"),
+        (_constant_benchmark, "same every day"),
+    ],
+    ids=["min-obs", "empty", "constant-benchmark"],
+)
+def test_other_bad_input_is_plain_value_error(est_pair, make_inputs, match):
+    security, benchmark, min_obs = make_inputs(est_pair)
+    with pytest.raises(ValueError, match=match) as info:
+        fit_market_model(security, benchmark, min_obs=min_obs)
+    assert not isinstance(info.value, EventDataError)
+
+
+# ---------------------------------------------------------------------------
+# Perfect fit (item 5)
+# ---------------------------------------------------------------------------
+
+
+def test_exact_linear_security_raises(est_pair):
+    _, benchmark = est_pair
+    security = 0.001 + 1.2 * benchmark
+    with pytest.raises(EventDataError, match="aren't the same series"):
+        fit_market_model(security, benchmark, min_obs=3)
+
+
+def test_same_series_twice_raises(est_pair):
+    _, benchmark = est_pair
+    with pytest.raises(EventDataError, match="aren't the same series"):
+        fit_market_model(benchmark, benchmark.copy(), min_obs=3)
+
+
+def test_tiny_residual_relative_to_security_spread_raises(est_pair):
+    # Residual std about 1e-9: above the absolute floor (1e-10) but far below
+    # 1e-6 times the security's std (about 10), so the relative floor fires.
+    _, benchmark = est_pair
+    noise = np.random.default_rng(0).normal(0.0, 1e-9, len(benchmark))
+    security = 1000 * benchmark + noise
+    with pytest.raises(EventDataError, match="aren't the same series"):
+        fit_market_model(security, benchmark, min_obs=3)

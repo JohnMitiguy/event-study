@@ -148,3 +148,61 @@ def test_end_not_after_start_raises(fake, tmp_path):
 def test_range_with_no_trading_days_raises(fake, tmp_path):
     with pytest.raises(ValueError, match="no trading days"):
         load(tmp_path, "2024-03-02", "2024-03-04")  # Saturday to Monday, exclusive
+
+
+# --- load_cached: frozen data (item 1 of the review) ---------------------------
+
+
+def fail_if_called(*args, **kwargs):
+    raise AssertionError("yf.download was called, but the cache should have been used")
+
+
+def test_load_cached_downloads_when_cache_missing(fake, tmp_path):
+    prices = P.load_cached("XLE", data_dir=tmp_path, today=TODAY)
+    assert len(fake.calls) == 1
+    assert fake.calls[0][1]["end"] == "2024-06-12"
+    assert prices.index[-1] == pd.Timestamp("2024-06-11")
+    assert P.cache_path("XLE", tmp_path).exists()
+
+
+def test_load_cached_never_downloads_when_cache_exists(fake, tmp_path, monkeypatch):
+    first = P.load_cached("XLE", data_dir=tmp_path, today=TODAY)
+    monkeypatch.setattr(P.yf, "download", fail_if_called)
+    # A year later the cache is stale, but it is still used as is.
+    later = P.load_cached("XLE", data_dir=tmp_path, today=date(2025, 6, 12))
+    assert later.index[-1] == pd.Timestamp("2024-06-11")
+    pd.testing.assert_series_equal(first, later, check_freq=False, check_index_type=False)
+
+
+def test_load_cached_refresh_downloads_and_replaces(fake, tmp_path):
+    P.load_cached("XLE", data_dir=tmp_path, today=TODAY)
+    refreshed = P.load_cached("XLE", data_dir=tmp_path, refresh=True, today=date(2024, 7, 2))
+    assert len(fake.calls) == 2
+    assert refreshed.index[-1] == pd.Timestamp("2024-07-01")
+    assert P._read_cache(P.cache_path("XLE", tmp_path)).index[-1] == pd.Timestamp("2024-07-01")
+
+
+# --- hashes -------------------------------------------------------------------
+
+
+def test_hashes_match_between_download_and_cache_read(fake, tmp_path):
+    downloaded = P.load_cached("XLE", data_dir=tmp_path, today=TODAY)
+    from_cache = P.load_cached("XLE", data_dir=tmp_path, today=TODAY)
+    assert P.dates_sha256(downloaded) == P.dates_sha256(from_cache)
+    assert P.values_sha256(downloaded) == P.values_sha256(from_cache)
+
+
+def test_values_hash_changes_with_one_value_but_dates_hash_does_not():
+    prices = pd.Series([100.0, 101.0, 102.0], index=pd.bdate_range("2024-01-02", periods=3))
+    changed = prices.copy()
+    changed.iloc[1] = 101.00000001
+    assert P.values_sha256(changed) != P.values_sha256(prices)
+    assert P.dates_sha256(changed) == P.dates_sha256(prices)
+
+
+def test_dates_hash_changes_with_one_date_but_values_hash_does_not():
+    prices = pd.Series([100.0, 101.0, 102.0], index=pd.bdate_range("2024-01-02", periods=3))
+    shifted = prices.copy()
+    shifted.index = pd.DatetimeIndex(["2024-01-02", "2024-01-03", "2024-01-05"])
+    assert P.dates_sha256(shifted) != P.dates_sha256(prices)
+    assert P.values_sha256(shifted) == P.values_sha256(prices)

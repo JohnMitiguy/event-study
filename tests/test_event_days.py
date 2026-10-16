@@ -4,7 +4,7 @@ from zoneinfo import ZoneInfo
 import pandas as pd
 import pytest
 
-from event_study.event_days import check_trading_days, event_day_zero
+from event_study.event_days import check_trading_days, event_day_zero, session_position
 
 ET = ZoneInfo("America/New_York")
 
@@ -96,3 +96,23 @@ def test_check_trading_days_holiday_counts_as_extra():
     with_holiday = pd.bdate_range("2024-07-01", "2024-07-12")
     with pytest.raises(ValueError, match=r"Non-session dates \(1\): 2024-07-04"):
         check_trading_days(series_on(with_holiday))
+
+
+# --- session_position ---------------------------------------------------------
+
+
+@pytest.mark.parametrize(
+    "earlier, later",
+    [
+        ("2024-05-31", "2024-06-03"),  # Friday -> Monday
+        ("2024-07-03", "2024-07-05"),  # across the July 4 holiday
+    ],
+)
+def test_session_position_counts_trading_days(earlier, later):
+    assert session_position(pd.Timestamp(later)) - session_position(pd.Timestamp(earlier)) == 1
+
+
+@pytest.mark.parametrize("day", ["2024-06-01", "2024-07-04", "1999-12-31"])
+def test_session_position_non_session_raises(day):
+    with pytest.raises(ValueError, match="not an NYSE session"):
+        session_position(pd.Timestamp(day))

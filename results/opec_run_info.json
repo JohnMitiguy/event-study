@@ -1,0 +1,46 @@
+{
+  "tickers": {
+    "XLE": {
+      "cache_file": "data/prices/XLE.csv",
+      "cache_modified": "2026-10-16T13:58:47-04:00",
+      "first_date": "2010-01-04",
+      "last_date": "2026-10-15",
+      "rows": 4222,
+      "dates_sha256": "892bb6f887b4f6578699d7d9d35c62dfa72c11290b11a23584f33286f6c79109",
+      "adj_close_sha256": "d5c9790b22c3b2ac3ed33028a490a48e25217c24d963932ef615b34073d6fbc2"
+    },
+    "SPY": {
+      "cache_file": "data/prices/SPY.csv",
+      "cache_modified": "2026-10-16T13:58:47-04:00",
+      "first_date": "2010-01-04",
+      "last_date": "2026-10-15",
+      "rows": 4222,
+      "dates_sha256": "892bb6f887b4f6578699d7d9d35c62dfa72c11290b11a23584f33286f6c79109",
+      "adj_close_sha256": "deba63577dc1695b4058c66ab4ecedb686fff2b94500eed5bba0e279ce1c90e4"
+    }
+  },
+  "returns_used": {
+    "first_date": "2010-01-05",
+    "last_date": "2026-10-15",
+    "rows": 4221
+  },
+  "est_length": 120,
+  "gap": 10,
+  "event_windows": [
+    [
+      -1,
+      1
+    ],
+    [
+      -5,
+      5
+    ]
+  ],
+  "use_leak": true,
+  "events_file": "events/opec_events.csv",
+  "events_file_sha256": "c5c78bd9a767eadd443c2338b78de4977b894ddbae6ba00707d2e610a3216b78",
+  "yfinance_version": "1.7.0",
+  "pandas_version": "3.0.6",
+  "git_commit": "d79169540fd47b780c5bdc84599a3852aa4c4280",
+  "git_dirty": true
+}

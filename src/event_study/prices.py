@@ -2,9 +2,17 @@
 
 Prices are cached in one CSV per ticker (data/prices/{TICKER}.csv). The cache
 always starts at CACHE_START and ends at the last completed trading day as of
-the download. Callers ask for any [start, end) range inside it and get a slice.
+the download.
+
+Two ways to read it:
+- load_cached (used by the scripts): the whole cached series, downloaded
+  only when the file is missing or refresh=True. Results stay tied to one
+  fixed download until you choose to refresh.
+- load_prices: any [start, end) slice, re-downloading whenever the cache
+  does not reach `end`.
 """
 
+import hashlib
 from datetime import date, datetime
 from pathlib import Path
 from zoneinfo import ZoneInfo
@@ -72,6 +80,59 @@ def _write_cache(path: Path, prices: pd.Series) -> None:
     prices.rename("Adj Close").to_csv(path, index_label="Date")
 
 
+def download_to_cache(
+    ticker: str, data_dir: Path = DEFAULT_DATA_DIR, today: date | None = None
+) -> pd.Series:
+    """Download CACHE_START up to (not including) today and replace the cache.
+
+    Excluding today means the last row is the last completed trading day and
+    today's unfinished bar is never cached. Returns the downloaded series.
+    """
+    download_end = (today or today_eastern()).isoformat()
+    prices = download_adjusted_close(ticker, CACHE_START, download_end)
+    _write_cache(cache_path(ticker, data_dir), prices)
+    return prices
+
+
+def load_cached(
+    ticker: str,
+    data_dir: Path = DEFAULT_DATA_DIR,
+    refresh: bool = False,
+    today: date | None = None,
+) -> pd.Series:
+    """The whole cached adjusted-close series for `ticker`.
+
+    Downloads only if the cache file is missing (or empty) or refresh=True.
+    Otherwise the cached file is returned as is, however old it is, so
+    re-running gives the same numbers. Callers that need dates past the
+    cache's last date must check that themselves and ask for a refresh.
+
+    `today` exists so tests can fix the date; leave it None normally.
+    """
+    prices = None if refresh else _read_cache(cache_path(ticker, data_dir))
+    if prices is None:
+        prices = download_to_cache(ticker, data_dir, today)
+    return prices
+
+
+def dates_sha256(prices: pd.Series) -> str:
+    """SHA-256 of the index dates, written as YYYY-MM-DD one per line.
+
+    Text dates make the hash independent of how pandas stores timestamps.
+    """
+    text = "\n".join(prices.index.strftime("%Y-%m-%d"))
+    return hashlib.sha256(text.encode("ascii")).hexdigest()
+
+
+def values_sha256(prices: pd.Series) -> str:
+    """SHA-256 of the values as little-endian 64-bit floats, in row order.
+
+    Any change to any price, even in the last digit, changes the hash.
+    """
+    data = prices.to_numpy(dtype="<f8").tobytes()
+    return hashlib.sha256(data).hexdigest()
+
+
 def load_prices(
     ticker: str,
     start: str,
@@ -109,9 +170,7 @@ def load_prices(
 
     last_day_needed = end_ts - pd.Timedelta(days=1)
     if prices is None or last_day_needed > prices.index[-1]:
-        download_end = (today or today_eastern()).isoformat()
-        prices = download_adjusted_close(ticker, CACHE_START, download_end)
-        _write_cache(path, prices)
+        prices = download_to_cache(ticker, data_dir, today)
 
     window = prices[(prices.index >= start_ts) & (prices.index < end_ts)]
     if window.empty:
