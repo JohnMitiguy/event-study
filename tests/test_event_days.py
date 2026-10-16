@@ -4,7 +4,7 @@ from zoneinfo import ZoneInfo
 import pandas as pd
 import pytest
 
-from event_study.event_days import event_day_zero
+from event_study.event_days import check_trading_days, event_day_zero
 
 ET = ZoneInfo("America/New_York")
 
@@ -66,3 +66,33 @@ def test_naive_datetime_rejected():
 def test_non_eastern_timezone_rejected(tz):
     with pytest.raises(ValueError, match="America/New_York"):
         event_day_zero(datetime(2024, 6, 4, 8, tzinfo=tz))
+
+
+# July 1-12, 2024 business days minus the July 4 holiday = the real sessions.
+JULY_2024 = pd.bdate_range("2024-07-01", "2024-07-12").drop(pd.Timestamp("2024-07-04"))
+
+
+def series_on(index):
+    return pd.Series(0.0, index=index, name="return")
+
+
+def test_check_trading_days_clean_series_passes():
+    assert check_trading_days(series_on(JULY_2024)) is None
+
+
+def test_check_trading_days_dropped_day_raises():
+    dropped = JULY_2024.drop(pd.Timestamp("2024-07-09"))
+    with pytest.raises(ValueError, match=r"Missing sessions \(1\): 2024-07-09"):
+        check_trading_days(series_on(dropped))
+
+
+def test_check_trading_days_extra_weekend_day_raises():
+    with_saturday = JULY_2024.append(pd.DatetimeIndex(["2024-07-06"])).sort_values()
+    with pytest.raises(ValueError, match=r"Non-session dates \(1\): 2024-07-06"):
+        check_trading_days(series_on(with_saturday))
+
+
+def test_check_trading_days_holiday_counts_as_extra():
+    with_holiday = pd.bdate_range("2024-07-01", "2024-07-12")
+    with pytest.raises(ValueError, match=r"Non-session dates \(1\): 2024-07-04"):
+        check_trading_days(series_on(with_holiday))

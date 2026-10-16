@@ -90,3 +90,39 @@ def event_day_zero(announced_at: datetime) -> pd.Timestamp:
     if cal.is_session(day):
         return cal.next_session(day)
     return cal.date_to_session(day, direction="next")
+
+
+def check_trading_days(returns: pd.Series) -> None:
+    """Raise ValueError unless the index has exactly the NYSE sessions
+    between its own first and last dates.
+
+    Lists sessions missing from the series and index dates that are not
+    sessions (weekends, holidays, or timestamps that are not midnight).
+
+    Limits: it cannot detect a series cut short at either end, since it only
+    checks between the series' own first and last dates. Duplicate dates are
+    not reported (windows.slice_windows catches those).
+    """
+    index = returns.index
+    if not isinstance(index, pd.DatetimeIndex):
+        raise ValueError(f"returns must have a DatetimeIndex, got {type(index).__name__}")
+    if index.tz is not None:
+        raise ValueError(f"returns index must be tz-naive, got time zone {index.tz}")
+
+    cal = nyse_calendar()
+    sessions = cal.sessions_in_range(index.min().normalize(), index.max().normalize())
+    # .difference gives the dates in the first index but not the second.
+    missing = sessions.difference(index)
+    extra = index.difference(sessions)
+    if len(missing) == 0 and len(extra) == 0:
+        return
+
+    def fmt(dates: pd.DatetimeIndex) -> str:
+        return ", ".join(str(d.date()) if d == d.normalize() else str(d) for d in dates) or "none"
+
+    raise ValueError(
+        f"returns index does not match NYSE sessions "
+        f"({index.min().date()} to {index.max().date()}).\n"
+        f"  Missing sessions ({len(missing)}): {fmt(missing)}\n"
+        f"  Non-session dates ({len(extra)}): {fmt(extra)}"
+    )
