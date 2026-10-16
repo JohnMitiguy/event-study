@@ -5,11 +5,24 @@ rules below and, if anything is wrong, raises one ValueError listing every
 problem by file line number (the header is line 1), so you can fix the whole
 file in one pass. A bad file is never partly loaded.
 
-Rules:
+File-level rules (checked first; any failure stops with one ValueError whose
+message starts with the file path):
+- The file is UTF-8 text (a byte-order mark is fine). Excel's plain "CSV"
+  and UTF-16 exports are not.
+- No NUL bytes. pandas would silently cut a field short at one.
+- No row has more fields than the header. A stray or trailing comma would
+  otherwise shift values into the wrong columns or drop them.
+- pandas can parse it as CSV (no unclosed quotes, not empty).
+
+Row rules:
 - All REQUIRED_COLUMNS are present. Extra columns are allowed and kept.
 - event_id is filled in and unique.
 - announcement_datetime_et is required; it and leak_datetime_et are naive
-  US Eastern wall-clock times written exactly as YYYY-MM-DD HH:MM.
+  US Eastern wall-clock times written exactly as YYYY-MM-DD HH:MM, with a
+  year from 2000 (CALENDAR_START) to the last year of the trading calendar.
+  The year is checked before any time zone conversion: pandas' conversion
+  misbehaves far outside that range (year 224 was reported as a
+  daylight-saving gap, 9999-12-31 evening crashed).
 - leak_datetime_et and leak_source_url are both filled or both blank, and a
   leak time must be strictly earlier than the announcement time.
 - decision_group, direction and surprise_flag take only the allowed values.
@@ -30,13 +43,20 @@ likely a conversion mistake. Not catchable here: a time converted from Vienna
 with the wrong offset is still a valid Eastern time, just the wrong one.
 """
 
+import io
 import re
+import warnings
 from datetime import datetime
 from pathlib import Path
 
 import pandas as pd
 
-from event_study.event_days import EASTERN_TZ_NAME, event_day_zero
+from event_study.event_days import (
+    CALENDAR_START,
+    EASTERN_TZ_NAME,
+    event_day_zero,
+    nyse_calendar,
+)
 
 REQUIRED_COLUMNS = (
     "event_id",
@@ -67,16 +87,18 @@ _DAY_DTYPE = "datetime64[us]"
 def parse_eastern(text: str) -> pd.Timestamp:
     """Turn "YYYY-MM-DD HH:MM" (naive Eastern) into a tz-aware Timestamp.
 
-    Raises ValueError for the wrong format, an impossible date, or a time
-    that does not exist or happens twice because of daylight saving (see the
-    module docstring).
+    Raises ValueError for the wrong format, an impossible date, a year
+    outside the trading calendar, or a time that does not exist or happens
+    twice because of daylight saving (see the module docstring).
     """
     if not _DATETIME_PATTERN.fullmatch(text):
         raise ValueError(f"{text!r} is not in the format YYYY-MM-DD HH:MM")
     try:
-        naive = pd.Timestamp(datetime.strptime(text, DATETIME_FORMAT))
+        parsed = datetime.strptime(text, DATETIME_FORMAT)
     except ValueError:
         raise ValueError(f"{text!r} is not a real date and time") from None
+    _check_year(text, parsed.year)
+    naive = pd.Timestamp(parsed)
 
     # nonexistent="NaT" returns "not a time" instead of raising, which lets
     # us tell this case apart from the ambiguous one below.
@@ -97,13 +119,82 @@ def parse_eastern(text: str) -> pd.Timestamp:
     return as_edt
 
 
-def _read_table(path: Path) -> pd.DataFrame:
-    """Read the CSV with every value as text, blanks as "" and spaces trimmed.
+def _check_year(text: str, year: int) -> None:
+    """Raise ValueError unless year is within the trading calendar's years.
+
+    The last year comes from the calendar, which ends about a year after
+    today, so it moves forward over time.
+    """
+    first_year = pd.Timestamp(CALENDAR_START).year
+    last_year = nyse_calendar().last_session.year
+    if not first_year <= year <= last_year:
+        raise ValueError(
+            f"{text} has year {year}, outside the supported range {first_year} to "
+            f"{last_year} (the NYSE trading calendar). Check the year for a typo."
+        )
+
+
+def _read_text(path: Path) -> str:
+    """The file's contents as text. Raises ValueError starting with the path.
+
+    Read as UTF-8; "utf-8-sig" also drops a byte-order mark at the start if
+    there is one. Any error (missing file, not UTF-8, ...) becomes ValueError.
+    """
+    try:
+        text = path.read_bytes().decode("utf-8-sig")
+    except Exception as err:
+        raise ValueError(
+            f"{path}: could not read the file as UTF-8 text ({type(err).__name__}: {err}). "
+            "Save it as UTF-8 CSV."
+        ) from err
+    if "\x00" in text:
+        # Count lines the way pandas does: \r\n, \r or \n each end one.
+        line = len(re.split(r"\r\n|\r|\n", text[: text.index("\x00") + 1]))
+        raise ValueError(
+            f"{path}: contains a NUL byte (character code 0) on line {line}. pandas would "
+            "silently cut that field short. The file may be corrupted or saved in the "
+            "wrong format."
+        )
+    return text
+
+
+def _parse_csv(path: Path, text: str) -> pd.DataFrame:
+    """Parse CSV text with every value as text. Raises ValueError starting with the path.
 
     dtype=str stops pandas guessing types (an event_id "001" stays "001");
     keep_default_na=False keeps blank cells as "" instead of NaN.
+
+    index_col=False: when every data row has one field more than the header
+    (e.g. a trailing comma on each line), pandas would otherwise quietly use
+    the first column as the row index and shift every value one column left.
+    With index_col=False it instead drops the extra fields and gives a
+    ParserWarning. Turning that warning into an error rejects the file, so
+    no value is lost or moved. A row with extra fields among normal rows
+    raises ParserError either way.
     """
-    table = pd.read_csv(path, dtype=str, keep_default_na=False)
+    try:
+        # catch_warnings restores the normal warning settings afterwards.
+        with warnings.catch_warnings():
+            warnings.simplefilter("error", pd.errors.ParserWarning)
+            return pd.read_csv(io.StringIO(text), dtype=str, keep_default_na=False, index_col=False)
+    except pd.errors.ParserWarning:
+        raise ValueError(
+            f"{path}: some rows have more fields than the header, usually from a stray or "
+            "trailing comma. Put values containing commas in double quotes."
+        ) from None
+    except Exception as err:
+        raise ValueError(
+            f"{path}: could not be read as CSV ({type(err).__name__}: {err})"
+        ) from err
+
+
+def _read_table(path: Path) -> pd.DataFrame:
+    """Read the CSV with every value as text, blanks as "" and spaces trimmed.
+
+    File-level problems (see the module docstring) raise ValueError starting
+    with the path. A missing required column also raises ValueError.
+    """
+    table = _parse_csv(path, _read_text(path))
     for column in table.columns:
         table[column] = table[column].str.strip()
     missing = [c for c in REQUIRED_COLUMNS if c not in table.columns]

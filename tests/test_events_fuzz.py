@@ -11,9 +11,9 @@ dropped or shuffled columns, stray commas, quotes and newlines in the raw
 text, different text encodings, and files cut off part way. Some examples
 are plain random bytes.
 
-pandas' own parse errors (EmptyDataError, ParserError) and
-UnicodeDecodeError are all subclasses of ValueError, so they count as
-ValueError here.
+Every error must also name the file: the loader's row checks start with
+"events file <path>", and file-level problems (not UTF-8, NUL bytes, CSV
+parse errors) start with the path itself.
 """
 
 import csv
@@ -23,7 +23,7 @@ from pathlib import Path
 
 import pandas as pd
 import pytest
-from hypothesis import assume, given
+from hypothesis import given
 from hypothesis import strategies as st
 from test_events import valid_row
 
@@ -53,6 +53,8 @@ NEAR_MISS_TIMES = [
     "0000-01-01 00:00",
     "0224-06-04 10:00",  # 2024 with two digits swapped
     "9999-12-31 18:59",
+    "9999-12-31 19:00",  # year 10000 in UTC
+    "9999-12-31 23:59",
 ]
 
 time_like = st.one_of(
@@ -67,10 +69,7 @@ junk_cell = st.one_of(
     st.sampled_from([" ", ",", '"', "\n", "nan", "NA", "None", "\t"]),
     time_like,
     st.text(max_size=20),
-    # Known bug, kept out so it doesn't hide other failures: times from
-    # 9999-12-31 19:00 raise NotImplementedError (see
-    # test_last_evening_of_year_9999_raises_value_error).
-).filter(lambda cell: not cell.startswith("9999-12-31"))
+)
 
 
 @st.composite
@@ -152,31 +151,15 @@ def load_bytes(data: bytes, use_leak: bool = True):
             return None, err
 
 
-def hits_index_column_bug(data: bytes) -> bool:
-    """True for files that trigger the known bug in
-    test_extra_field_on_every_row_with_repeated_id.
-
-    When every data row has one more field than the header, pandas uses the
-    first field as the row index (so it is no longer 0, 1, 2, ...). If the
-    event_id column then has a repeated value, the loader crashes with
-    TypeError. The fuzz tests skip exactly these files (hypothesis.assume),
-    so that bug doesn't make them fail at random and hide new problems.
-    """
-    try:
-        table = pd.read_csv(io.BytesIO(data), dtype=str, keep_default_na=False)
-    except ValueError:
-        return False
-    if isinstance(table.index, pd.RangeIndex) or "event_id" not in table.columns:
-        return False
-    ids = table["event_id"].str.strip()
-    return bool((ids.duplicated(keep=False) & (ids != "")).any())
-
-
 def assert_readable(err: ValueError) -> None:
-    """A message a person can act on: non-empty text, not a bare repr."""
+    """A message a person can act on: non-empty text that names the file.
+
+    load_bytes always names the file events.csv.
+    """
     message = str(err).strip()
     assert message, f"{type(err).__name__} with an empty message"
     assert any(ch.isalpha() for ch in message)
+    assert "events.csv" in message
 
 
 def assert_checked(events: pd.DataFrame) -> None:
@@ -192,7 +175,6 @@ def assert_checked(events: pd.DataFrame) -> None:
 
 @given(messy_csv(), st.booleans())
 def test_messy_file_loads_cleanly_or_raises_value_error(data, use_leak):
-    assume(not hits_index_column_bug(data))
     events, err = load_bytes(data, use_leak)
     if err is not None:
         assert_readable(err)
@@ -209,9 +191,7 @@ def test_damaged_cells_load_cleanly_or_raise_value_error(header_and_rows, use_le
     writer = csv.DictWriter(buffer, fieldnames=columns, lineterminator="\n")
     writer.writeheader()
     writer.writerows(rows)
-    data = buffer.getvalue().encode("utf-8")
-    assume(not hits_index_column_bug(data))
-    events, err = load_bytes(data, use_leak)
+    events, err = load_bytes(buffer.getvalue().encode("utf-8"), use_leak)
     if err is not None:
         assert_readable(err)
     else:
@@ -287,101 +267,122 @@ def test_harmless_variation_loads(data):
     assert_checked(events)
 
 
-# --- Known problems (expected to fail until fixed) ----------------------------
 
 
-@pytest.mark.xfail(
-    strict=True,
-    reason=(
-        "pandas' C parser cuts a field at a NUL byte and drops the rest, so "
-        "'abc\\x00def' loads as 'abc' with no error. A bad file should not "
-        "load partly changed."
-    ),
+# --- Fixed problems found by the fuzz tests -----------------------------------
+
+LAST_YEAR = SESSIONS[-1].year
+
+
+def error_for(data: bytes) -> tuple[str, str]:
+    """Load data from a temporary events.csv; return (its path, the error message).
+
+    Fails the test if the file loads, or raises something other than ValueError.
+    """
+    with tempfile.TemporaryDirectory() as folder:
+        path = Path(folder) / "events.csv"
+        path.write_bytes(data)
+        with pytest.raises(ValueError) as info:
+            load_events(path)
+    return str(path), str(info.value)
+
+
+@pytest.mark.parametrize(
+    "name",
+    [
+        "empty file",
+        "whitespace only",
+        "stray comma in second row",
+        "trailing comma on every row",
+        "unterminated quote",
+        "utf-16",
+        "cp1252 accent",
+    ],
 )
-# A NUL inside a time cuts it short and the format check catches it, so
-# only free-text columns are tested.
-@pytest.mark.parametrize("column", ["event_id", "source_url", "notes"])
+def test_file_level_errors_start_with_the_path(name):
+    path, message = error_for(RAISES[name])
+    assert message.startswith(path)
+
+
+@pytest.mark.parametrize("name", ["utf-16", "cp1252 accent"])
+def test_wrong_encoding_says_utf8(name):
+    _, message = error_for(RAISES[name])
+    assert "UTF-8" in message
+
+
+def test_missing_file_raises_value_error(tmp_path):
+    path = tmp_path / "no_such_file.csv"
+    with pytest.raises(ValueError) as info:
+        load_events(path)
+    assert str(info.value).startswith(str(path))
+    assert "FileNotFoundError" in str(info.value)
+
+
+@pytest.mark.parametrize(
+    "column", ["event_id", "announcement_datetime_et", "source_url", "notes"]
+)
 def test_nul_byte_in_a_field_is_rejected(column):
     original = valid_row()[column]
     damaged = original[:4] + "\x00" + original[4:]
-    data = csv_text([valid_row(**{column: damaged})]).encode()
-    _, err = load_bytes(data)
-    assert err is not None, "file with a NUL byte loaded without error"
+    path, message = error_for(csv_text([valid_row(**{column: damaged})]).encode())
+    assert message.startswith(path)
+    assert "NUL byte" in message
+    assert "line 2" in message
 
 
-@pytest.mark.xfail(
-    strict=True,
-    reason=(
-        "pandas' EmptyDataError, ParserError and UnicodeDecodeError reach the "
-        "caller unwrapped. They are ValueErrors, but unlike the loader's own "
-        "messages they don't name the events file, and the wording is the "
-        "parser's ('Error tokenizing data. C error: ...', \"'utf-8' codec "
-        "can't decode byte 0xff ...\")."
-    ),
-)
+def test_nul_byte_line_number_counts_every_line_ending():
+    # Header, then two rows with \r\n endings; the NUL is in the second row.
+    text = (HEADER + GOOD_LINE + SECOND_LINE.replace("fake", "fa\x00ke")).replace("\n", "\r\n")
+    _, message = error_for(text.encode())
+    assert "line 3" in message
+
+
 @pytest.mark.parametrize(
-    "name", ["empty file", "stray comma in second row", "unterminated quote", "utf-16"]
+    "lines",
+    [
+        # A trailing comma on each row: empty extra field.
+        [GOOD_LINE.replace("\n", ",\n")],
+        # Extra text on each row: would have been dropped silently.
+        [GOOD_LINE.replace("\n", ",extra\n"), SECOND_LINE.replace("\n", ",extra\n")],
+        # The old crash: once shifted, event_id held the same announcement
+        # time twice and the duplicate check raised TypeError.
+        [GOOD_LINE.replace("\n", ",\n"), SECOND_LINE.replace("\n", ",\n")],
+    ],
+    ids=["trailing comma", "extra text", "repeated value after shift"],
 )
-def test_parser_errors_name_the_file(name):
-    with tempfile.TemporaryDirectory() as folder:
-        path = Path(folder) / "events.csv"
-        path.write_bytes(RAISES[name])
-        with pytest.raises(ValueError) as info:
-            load_events(path)
-    assert str(path) in str(info.value)
+def test_extra_field_on_every_row_is_rejected(lines):
+    path, message = error_for((HEADER + "".join(lines)).encode())
+    assert message.startswith(path)
+    assert "more fields than the header" in message
 
 
-@pytest.mark.xfail(
-    strict=True,
-    raises=TypeError,
-    reason=(
-        "When every data row has one field more than the header (e.g. a "
-        "trailing comma on each row), pandas silently uses the first column "
-        "as the row index and shifts the rest left. _duplicate_id_errors then "
-        "computes 'i + 2' on a text index label and raises TypeError if the "
-        "shifted event_id column has a repeated value."
-    ),
-)
-def test_extra_field_on_every_row_with_repeated_id():
-    # Two events announced at the same time, each line ending in a comma.
-    # After the shift, event_id holds the (repeated) announcement time.
-    rows = [valid_row(event_id="test_event_1"), valid_row(event_id="test_event_2")]
-    lines = csv_text(rows).splitlines()
-    text = lines[0] + "\n" + "".join(line + ",\n" for line in lines[1:])
-    _, err = load_bytes(text.encode())
-    assert err is not None
-
-
-@pytest.mark.xfail(
-    strict=True,
-    raises=NotImplementedError,
-    reason=(
-        "parse_eastern calls tz_localize, which raises NotImplementedError "
-        "(not ValueError) for 9999-12-31 19:00 or later: in UTC that is "
-        "year 10000. load_events only collects ValueErrors, so the whole load "
-        "crashes instead of listing the row's problem."
-    ),
+@pytest.mark.parametrize(
+    "text",
+    [
+        "9999-12-31 23:59",  # used to raise NotImplementedError
+        "9999-12-31 19:00",
+        "0224-06-04 10:00",  # used to be blamed on daylight saving
+        "0001-01-01 12:00",
+        "1999-12-31 23:59",
+        f"{LAST_YEAR + 1}-01-04 10:00",
+    ],
 )
 @pytest.mark.parametrize("column", ["announcement_datetime_et", "leak_datetime_et"])
-def test_last_evening_of_year_9999_raises_value_error(column):
-    row = valid_row(**{column: "9999-12-31 23:59"})
+def test_year_outside_calendar_is_rejected(text, column):
+    row = valid_row(**{column: text})
     if column == "leak_datetime_et":
         row["leak_source_url"] = "https://example.com/leak"
-    _, err = load_bytes(csv_text([row]).encode())
-    assert err is not None
+    _, message = error_for(csv_text([row]).encode())
+    year = int(text[:4])
+    assert f"line 2 (test_event_1): {column}: {text} has year {year}" in message
+    assert f"supported range 2000 to {LAST_YEAR}" in message
+    assert "daylight saving" not in message
 
 
-@pytest.mark.xfail(
-    strict=True,
-    reason=(
-        "For early years (at least 0001-1000) tz_localize returns NaT, which "
-        "parse_eastern reads as the daylight-saving gap, so a typo like "
-        "0224-06-04 is reported as 'clocks jumped from 2:00 to 3:00' instead "
-        "of as a bad or out-of-range date."
-    ),
+@pytest.mark.parametrize(
+    "text", ["2000-01-03 10:00", f"{SESSIONS[-2].date()} 10:00"], ids=["first", "last"]
 )
-def test_typo_year_is_not_blamed_on_daylight_saving():
-    row = valid_row(announcement_datetime_et="0224-06-04 10:00")
-    _, err = load_bytes(csv_text([row]).encode())
-    assert err is not None
-    assert "daylight saving" not in str(err)
+def test_years_at_the_ends_of_the_range_still_load(text):
+    events, err = load_bytes(csv_text([valid_row(announcement_datetime_et=text)]).encode())
+    assert err is None, str(err)
+    assert_checked(events)

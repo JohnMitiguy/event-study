@@ -219,7 +219,7 @@ LEAK = {"leak_datetime_et": "2024-06-03 10:00", "leak_source_url": "https://exam
         ({"surprise_flag": "yes"}, "surprise_flag is 'yes'"),
         ({"source_url": ""}, "source_url is blank"),
         # Before the trading calendar starts, so event_day_zero raises.
-        ({"announcement_datetime_et": "1999-06-01 10:00"}, "day 0: .*outside the trading calendar"),
+        ({"announcement_datetime_et": "1999-06-01 10:00"}, "has year 1999, outside the supported range 2000 to"),
     ],
 )
 def test_bad_row_raises(tmp_path, changes, message):

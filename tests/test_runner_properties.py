@@ -7,9 +7,9 @@ perfect-fit stretch, a benchmark row missing), and 0-5 events whose day 0 is
 anywhere in the data or just outside it. Then it checks the shape of the
 results table, which must hold whatever happens to each event.
 
-Left out on purpose (each has its own expected-to-fail test at the end):
-a repeated event window, and a benchmark that is flat for a whole
-estimation window.
+Not generated, because both stop the run with ValueError by design (tested
+at the end): a repeated event window, and a benchmark that is flat for a
+whole estimation window.
 """
 
 import numpy as np
@@ -19,6 +19,7 @@ from hypothesis import given
 from hypothesis import strategies as st
 from test_runner import make_events
 
+from event_study.errors import EventDataError
 from event_study.event_days import nyse_calendar
 from event_study.market_model import HARD_MIN_OBS
 from event_study.runner import result_columns, run_events, widest_window
@@ -140,7 +141,7 @@ def test_abnormal_table_has_exactly_the_ok_events(inputs):
     assert abnormal.columns.tolist() == list(range(start, end + 1))
 
 
-# --- Known problems (expected to fail until fixed) ----------------------------
+# --- Settings and data that stop the run -------------------------------------
 
 
 def clean_inputs(n: int = 300) -> tuple[pd.Series, pd.Series]:
@@ -152,40 +153,45 @@ def clean_inputs(n: int = 300) -> tuple[pd.Series, pd.Series]:
     return pd.Series(security, index=dates), pd.Series(benchmark, index=dates)
 
 
-@pytest.mark.xfail(
-    strict=True,
-    reason=(
-        "A repeated event window, e.g. ((-1, 1), (-1, 1)), is accepted and "
-        "the results table gets each CAR and t column four times (23 columns "
-        "instead of the 19 result_columns lists). It should either raise "
-        "ValueError or give each column once."
-    ),
+@pytest.mark.parametrize(
+    "windows",
+    [
+        ((-1, 1), (-1, 1)),
+        ((-1, 1), (-5, 5), (-1, 1)),
+        ((-1, 1), [-1, 1]),  # a list and a tuple with the same days
+    ],
 )
-def test_repeated_event_window_gives_each_column_once():
+@pytest.mark.parametrize("n_events", [0, 1])
+def test_repeated_event_window_raises(windows, n_events):
+    """It used to give each CAR and t column four times (23 columns, not 19)."""
     security, benchmark = clean_inputs()
-    events = make_events([security.index[200]])
-    try:
-        results, _ = run_events(events, security, benchmark, event_windows=((-1, 1), (-1, 1)))
-    except ValueError:
-        return  # rejecting the setting would also be a fix
-    assert results.columns.is_unique
+    events = make_events([security.index[200]] * n_events)
+    with pytest.raises(ValueError, match=r"same window more than once: \[-1,\+1\]") as info:
+        run_events(events, security, benchmark, event_windows=windows)
+    assert not isinstance(info.value, EventDataError)
 
 
-@pytest.mark.xfail(
-    strict=True,
-    raises=ValueError,
-    reason=(
-        "A benchmark that is flat over one event's estimation window raises "
-        "plain ValueError in fit_market_model (documented there), which stops "
-        "the whole run. DECISIONS.md says data problems tied to one event "
-        "raise EventDataError so the other events still run. Real SPY is "
-        "never flat for 120 days, but stale or forward-filled prices could be."
-    ),
-)
-def test_flat_benchmark_fails_only_that_event():
+@given(st.lists(event_window(10), min_size=1, max_size=3), st.data())
+def test_any_repeated_window_raises(windows, data):
+    repeated = data.draw(st.sampled_from(windows))
+    position = data.draw(st.integers(min_value=0, max_value=len(windows)))
+    windows = windows[:position] + [repeated] + windows[position:]
     security, benchmark = clean_inputs()
-    # Event A (row 200) estimates on rows 71-190; event B (row 290) on 161-280.
+    with pytest.raises(ValueError, match="same window more than once"):
+        run_events(make_events([]), security, benchmark, event_windows=tuple(windows))
+
+
+def test_flat_benchmark_stops_the_run():
+    """A benchmark with no variance is a broken series, not one failed event.
+
+    The plain ValueError (not EventDataError) stops the whole run, even
+    though the other event's estimation window is fine.
+    """
+    security, benchmark = clean_inputs()
+    # Event A (row 200) estimates on rows 71-190, all flat; event B (row 290)
+    # on rows 161-280, partly flat.
     benchmark.iloc[60:200] = 0.0
     events = make_events([security.index[200], security.index[290]], ids=["flat", "fine"])
-    results, _ = run_events(events, security, benchmark)
-    assert results["status"].tolist() == ["failed", "ok"]
+    with pytest.raises(ValueError, match="same every day") as info:
+        run_events(events, security, benchmark)
+    assert not isinstance(info.value, EventDataError)

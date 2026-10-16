@@ -10,6 +10,13 @@ still run. Any other exception, including a plain ValueError (bad parameters,
 a broken index), stops the run: it is a problem with the whole run, not with
 one event.
 
+A flat benchmark also stops the run. If the benchmark return is the same on
+every day of an event's estimation window, fit_market_model raises a plain
+ValueError (beta can't be estimated). A benchmark with no variance is
+treated as a broken series, for example stale or forward-filled prices,
+not as one failed event: the same fault would likely affect other events
+too, and the data should be fixed rather than the event reported as failed.
+
 Any average across events must count N from status "ok" rows only and
 report every failed event with its reason (pandas' .mean() silently skips
 the NaN numbers of failed events).
@@ -90,6 +97,20 @@ def result_columns(event_windows) -> list[str]:
         "status",
         "error",
     ]
+
+
+def _check_windows(event_windows) -> None:
+    """Raise ValueError if an event window appears more than once.
+
+    Each window gets its own CAR and t columns, named from its start and
+    end, so a repeated window would give the results table duplicate
+    columns. tuple() makes [-1, 1] and (-1, 1) count as the same window.
+    """
+    windows = [tuple(w) for w in event_windows]
+    repeated = sorted({w for w in windows if windows.count(w) > 1})
+    if repeated:
+        labels = ", ".join(window_label(w) for w in repeated)
+        raise ValueError(f"event_windows lists the same window more than once: {labels}")
 
 
 def _check_events(events: pd.DataFrame) -> None:
@@ -196,7 +217,12 @@ def run_events(
     abnormal: abnormal returns for events that ran, indexed by event_id, one
     column per event day across the widest window (-5 ... 5 by default).
     Failed events have no row.
+
+    Raises ValueError (stopping the run) for a repeated event window, a bad
+    events table, bad parameters, a broken index, or a benchmark that is
+    flat over an estimation window (see the module docstring).
     """
+    _check_windows(event_windows)
     _check_events(events)
     diagnostics = overlap_diagnostics(events["day0"], est_length, gap, event_windows)
 
