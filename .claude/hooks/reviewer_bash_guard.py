@@ -18,8 +18,11 @@ Assumptions:
 - A flag that takes a value takes it as --flag=value (long flags only) or as
   the next word. The value may not start with "-", so a blocked flag can't
   hide as a value.
-- pytest file arguments must be under tests/ with no "..", because pytest
-  imports and runs any .py file it is given.
+- pytest file arguments must be relative paths under tests/ with no ".."
+  and no backslash anywhere, because pytest imports and runs any .py file
+  it is given. Backslashes are checked after shlex.split, which (like bash)
+  drops unquoted ones; such a word still can't get past the ".." and
+  under-tests/ rules. Tests: the backslash cases in BLOCKED.
 - If this script crashes, it blocks (fails closed). If it can't start at all
   (uv or Python missing), Claude Code lets the command run: the hook is a
   backstop and fails open.
@@ -30,6 +33,7 @@ Tests: tests/test_reviewer_hook.py.
 import json
 import shlex
 import sys
+from pathlib import PureWindowsPath
 
 BLOCKED_CHARS = ";&|<>`$()\n\r"
 
@@ -165,9 +169,14 @@ def check_file_arg(prefix: tuple[str, ...], word: str) -> None:
     """Raise Blocked if a pytest file argument is outside tests/. Other commands take any."""
     if prefix != PYTEST:
         return
+    if "\\" in word or ".." in word:
+        raise Blocked(f"pytest file arguments may not contain a backslash or '..' ({word})")
     # tests/test_x.py::test_name -> tests/test_x.py
-    parts = word.split("::")[0].split("/")
-    if parts[0] != "tests" or ".." in parts:
+    path = word.split("::")[0]
+    # anchor is the drive and/or root: non-empty for /x, C:/x, C:x and //server/share/x.
+    if PureWindowsPath(path).anchor:
+        raise Blocked(f"pytest file arguments must be relative paths ({word})")
+    if path.split("/")[0] != "tests":
         raise Blocked(f"pytest file arguments must be under tests/ ({word})")
 
 
