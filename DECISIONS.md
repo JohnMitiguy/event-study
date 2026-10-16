@@ -1,7 +1,20 @@
 Decision: OPEC+ first pass uses XLE as the security and SPY as the benchmark, with Brent as a later robustness check. Reason: ETF prices avoid futures roll artifacts, and SPY is simple, with the small XLE-in-SPY overlap noted in the README.
 
-Decision: Day 0 is the announcement date if it is a trading session and the announcement comes before that day’s actual close, otherwise the next session. Reason: early closes, weekends, holidays and unscheduled closures all change when the market can first react.
+Decision: Day 0 is based on the earliest credible leak (Reuters, Bloomberg or WSJ stating the specific outcome from multiple or named sources) when one exists, otherwise the official announcement; the official time is run as a robustness check. Reason: markets react when information arrives, and the rule is fixed before seeing returns so the choice of leak time can’t be tuned to the result.
 
 Decision: Event day logic only accepts timezone-aware datetimes in America/New_York. Reason: naive or fixed-offset timestamps cause silent off-by-one-day errors around daylight saving.
 
 Decision: Estimation window is 120 trading days ending at day -10 (days -129 through -10), and event windows are [-1,+1] and [-5,+5], all by trading-day position. Reason: the gap keeps pre-event run-up and leaked news out of the model, and counting positions avoids calendar-day errors around weekends and holidays.
+
+Decision: Window functions raise an error when data is missing or windows collide, and never shrink or shift a window. Reason: a silently truncated 60-day estimation window would look like a 120-day regression and quietly weaken every result.
+
+
+Decision: Main results keep all data; a robustness run drops events whose estimation window contains the five largest absolute XLE return days (all 2020). Reason: those days are XLE-specific outliers that inflate residual variance and distort beta, and fixing the rule before seeing results avoids data snooping.
+
+Next: session 5, the events CSV schema, with confound_note added. After that, the CSV loader (which attaches the Eastern timezone to naive strings), then the engine. The overlapping estimation window question is still open, and it needs an answer before the engine.
+
+Decision: A row needs a primary-source announcement time, and events without one are left out and listed with reasons in the README. Reason: guessing the time can shift day 0 by a day, and silently dropping events would be an undisclosed selection effect.
+
+Decision: Saudi unilateral decisions are logged with a decision_group tag and reported as a separate subsample, not averaged into the main result. Reason: they are a different kind of shock from group decisions, and a blended average would describe neither.
+
+Decision: An event with a leak known only by date uses the official announcement time and is logged in the README with a note, not dropped. Reason: dropping it would silently shrink the sample, and the official time is the conservative fallback.
