@@ -40,6 +40,17 @@ uv run python scripts/run_opec.py --official-time    # robustness check: officia
 
 The first run of `run_opec.py` downloads prices from Yahoo Finance into `data/prices/`; after that it reuses them (see [Price data](#price-data)).
 
+## Methodology reviewer (Claude Code)
+
+`.claude/agents/methodology-reviewer.md` is a read-only Claude Code subagent that hunts for look-ahead bias, window errors, overlap, thin samples, silent failures and code that disagrees with DECISIONS.md. It never edits files; it suggests DECISIONS.md lines for you to add. Its shell access is limited by a hook to `git log`, `git diff`, `git status`, `uv run pytest` and `uv run ruff check`, and it has no web access. Run it from Claude Code with:
+
+- `/review-last`: the last commit. Did methodology change without a DECISIONS.md entry, and do tests cover it?
+- `/audit-decisions`: every DECISIONS.md entry checked against the code.
+- `/check-results`: ok and failed counts, overlap diagnostics, sample size and a skeptical reading of `results/`.
+- `/check-events`: the events CSV checked against the rules below, plus a list of rows to verify against their primary sources (by hand, since it can't open URLs).
+
+Text after a command is passed along as extra notes, for example `/review-last focus on day 0`.
+
 ## Results
 
 There are no real results yet. The events CSV has no events in it, so `results/opec_results.csv` contains only a header row. The charts in `charts/` are either price charts or come from simulated data, not from real events.
