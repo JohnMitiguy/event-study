@@ -1,4 +1,4 @@
-from datetime import datetime, timedelta, timezone
+from datetime import UTC, datetime, timedelta, timezone
 from zoneinfo import ZoneInfo
 
 import pandas as pd
@@ -60,7 +60,7 @@ def test_naive_datetime_rejected():
 
 @pytest.mark.parametrize(
     "tz",
-    [timezone.utc, timezone(timedelta(hours=-5))],
+    [UTC, timezone(timedelta(hours=-5))],
     ids=["utc", "fixed_minus_5"],
 )
 def test_non_eastern_timezone_rejected(tz):

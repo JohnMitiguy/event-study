@@ -23,7 +23,13 @@ import numpy as np
 from matplotlib.ticker import PercentFormatter
 
 from event_study.market_model import car_test, fit_market_model
-from event_study.simulate import DEMO_SEED, PLANTED_JUMP, TRUE_BETA, planted_event, window_label
+from event_study.simulate import (
+    DEMO_SEED,
+    PLANTED_JUMP,
+    TRUE_BETA,
+    planted_event,
+    window_label,
+)
 from event_study.windows import (
     DEFAULT_EST_LENGTH,
     DEFAULT_EVENT_WINDOWS,

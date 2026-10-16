@@ -22,6 +22,10 @@ Read DECISIONS.md before changing any methodology.
 - Flag assumptions instead of silently picking one.
 - Do not commit. The user reviews diffs and commits.
 
+- Before saying a task is done, run `uv run ruff check` and `uv run pytest`, and report both results.
+- Prefer the simplest approach. Don't add files, dependencies, or features beyond what the brief names without asking.
+- For choices that don't change results (file formats, names, paths), pick the simplest option and note it in one line instead of asking.
+
 ## Environment
 - Windows, PowerShell. Use pathlib for paths.
 - Add packages with uv add. Run tests with uv run pytest.

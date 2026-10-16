@@ -26,3 +26,8 @@ dev = [
     "pytest>=9.1.1",
     "ruff>=0.17.1",
 ]
+
+[tool.ruff.lint]
+ignore = [
+    "TRY004",  # All bad-input errors in this project are ValueError on purpose, so callers catch a single type.
+]
