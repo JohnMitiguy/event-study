@@ -1,6 +1,54 @@
 # Event study framework
 
-Measures stock market reactions to geopolitical events using a market-model event study, starting with OPEC+ decisions (XLE vs SPY).
+## What this is
+
+This project asks a simple question: when a geopolitical event happens, does a stock or sector move more than you would have expected from the market alone? The first case is OPEC+ production decisions and the energy sector, measured with the XLE energy ETF against the S&P 500 (SPY). Later event types are planned: terrorist attacks, tariffs, OFAC sanctions and Red Sea shipping disruptions.
+
+A finding of "no measurable effect" is a valid result here and gets reported as such.
+
+## Method
+
+For each event, a market model is fitted by ordinary least squares: XLE's daily return regressed on SPY's, over an estimation window that ends before the event (by default 120 trading days, ending 10 trading days before day 0). The abnormal return on each day around the event is XLE's actual return minus what the model predicted from SPY that day. Abnormal returns are summed into cumulative abnormal returns (CARs) over short windows, by default days -1 to +1 and -5 to +5. Day 0 is the first trading day the market could react to the news (the leak time if there was a credible timed leak, otherwise the official announcement). All windows count trading days, not calendar days. Returns are simple daily returns from adjusted close prices.
+
+The plan is to average CARs across events and test the average. So far the code produces per-event CARs and per-event test statistics; the cross-event average and test are not built yet. Methodology choices and the reasons for them are in [DECISIONS.md](DECISIONS.md).
+
+## Project layout
+
+```
+src/event_study/   the library: prices, events loader, trading-day logic, windows, market model, runner
+tests/             pytest tests (no network, no price cache needed)
+scripts/           run_opec.py (the study), plus demos, the null calibration and a price chart
+events/            the hand-filled events CSV
+results/           output CSV and run info from the last run
+charts/            saved charts
+data/              downloaded price cache (not in git)
+DECISIONS.md       methodology decisions and why
+```
+
+## How to run
+
+Install [uv](https://docs.astral.sh/uv/), then from the project root:
+
+```
+uv sync                              # install Python 3.13 and the packages
+uv run pytest                        # run the tests
+uv run python scripts/run_opec.py    # run the OPEC+ study
+```
+
+The first run of `run_opec.py` downloads prices from Yahoo Finance into `data/prices/`; after that it reuses them (see [Price data](#price-data)).
+
+## Results
+
+There are no real results yet. The events CSV has no events in it, so `results/opec_results.csv` contains only a header row. The charts in `charts/` are either price charts or come from simulated data, not from real events.
+
+## Limitations
+
+- **Confounding news.** A CAR picks up everything that moved XLE relative to SPY in the window, not only the OPEC+ decision. Other news on the same days (an oil supply shock, a big energy company's earnings, a market-wide selloff that hits energy harder) can look like an event effect. The `confound_note` column records known cases, but it can't catch everything, and longer windows are more exposed.
+- **Thin samples.** OPEC+ decisions are infrequent, and some subgroups (for example Saudi unilateral actions, which are reported separately) will have only a handful of events. With few events the cross-event test has little power, and one unusual event can drive the average.
+- **Overlapping estimation windows.** When events are close together, one event's estimation window can contain an earlier event's reaction, which distorts that event's model. The runner reports the overlap for each event but doesn't exclude or adjust anything yet. How to handle it is still to be decided before the full sample is run.
+- **The test statistic ignores estimation error.** The per-event statistic divides the CAR by the residual standard deviation times the square root of the window length. It treats the fitted alpha and beta as exact, which slightly understates the true uncertainty, more so for longer windows.
+- **Calibration used simulated normal noise.** The test statistic was checked on simulated events with no planted effect, to confirm it doesn't flag effects too often by chance. That simulation used normally distributed returns. Real daily returns have fatter tails, so on real data the test may produce false positives somewhat more often than the calibration suggests.
+- **XLE is part of SPY.** Energy stocks are in the S&P 500, so part of any energy move also shows up in the benchmark. The overlap is small, but it slightly dampens measured abnormal returns.
 
 ## Price data
 
