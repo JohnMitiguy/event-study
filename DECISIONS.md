@@ -61,7 +61,7 @@ Decision: run_opec.py stops, instead of logging failed events, if the trading-da
 Decision: The runner reports overlap diagnostics per event and applies no exclusions, and the treatment of overlapping estimation windows is decided after the pilot, before the full sample is run. Reason: with a handful of events overlap is rare, and seeing the diagnostics on the real list is better than guessing a rule.
 
 ## Not built yet
-- Official-time robustness run (needs its own output paths so it cannot overwrite the main results)
+- Official-time robustness run (the --official-time flag exists, but the run has not been done)
 - Saudi unilateral subsample report
 - Outlier-exclusion robustness run
 - Brent robustness check
