@@ -38,9 +38,9 @@
   ],
   "use_leak": true,
   "events_file": "events/opec_events.csv",
-  "events_file_sha256": "8d318cc813d931f6c295ef6c6efb646013621fc2e6f7d715af109d47455a41e9",
+  "events_file_sha256": "71e98d5af3e70baf79e2847fd906b92c2522408c627c3403d5a4c3d2fe764e76",
   "yfinance_version": "1.7.0",
   "pandas_version": "3.0.6",
-  "git_commit": "a59b6cb6d4b220e9092d58bd1623e3b1e8377c0d",
-  "git_dirty": false
+  "git_commit": "b88acffb76beb0270a08aef090317e4385ade8d2",
+  "git_dirty": true
 }

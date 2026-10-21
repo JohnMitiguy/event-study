@@ -60,6 +60,10 @@ Decision: run_opec.py stops, instead of logging failed events, if the trading-da
 
 Decision: The runner reports overlap diagnostics per event and applies no exclusions, and the treatment of overlapping estimation windows is decided after the pilot, before the full sample is run. Reason: with a handful of events overlap is rare, and seeing the diagnostics on the real list is better than guessing a rule.
 
+Decision: confound_note records only specific, dated, sourced items inside [-1,+1] that plausibly hit energy differently from the broad market; market backdrop is left out and flagged events stay in the main run. Reason: the market model already removes market-wide moves, and excluding on judgment calls invites cherry-picking.
+
+Decision: A pause or delay of scheduled increases is tagged hold, even when the same release includes a small pre-announced increase. Reason: tagging it increase would pool a supply-tightening surprise with real loosening events and wash out the cut and increase tests.
+
 ## Not built yet
 - Official-time robustness run (the --official-time flag exists, but the run has not been done)
 - Saudi unilateral subsample report

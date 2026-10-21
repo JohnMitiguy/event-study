@@ -1,6 +1,6 @@
 # Status
 
-Last updated: 2026-10-16
+Last updated: 2026-10-21
 
 ## Built
 
@@ -14,9 +14,31 @@ Last updated: 2026-10-16
 - `scripts/run_opec.py`: the OPEC+ run (XLE vs SPY), writing results, run info and a per-event chart. `--official-time` uses official announcement times and writes to separate `*_official_time` files.
 - Tests (including property-based and fuzz tests), Ruff, and CI.
 
+## Pilot (run 2026-10-21)
+
+Three events in `events/opec_events.csv`, entered from the user's values: opec_2022_10 (leak time used), opec_2025_11, opec_2023_04. The loader accepted all three, and `run_opec.py` (main run, leak time) gave 3 ok, 0 failed. Outputs are in `results/opec_results.csv`, `results/opec_run_info.json` and `charts/opec_events.png`. The events file and DECISIONS.md were uncommitted at run time, so run info records `git_dirty: true`.
+
+| event_id | day 0 | CAR [-1,+1] | t | CAR [-5,+5] | t | est overlap | nearby |
+|---|---|---|---|---|---|---|---|
+| opec_2022_10 | 2022-10-05 | +6.36% | 1.76 | +14.37% | 2.08 | 0 | 0 |
+| opec_2025_11 | 2025-11-03 | +0.12% | 0.07 | +2.57% | 0.72 | 0 | 0 |
+| opec_2023_04 | 2023-04-03 | +2.18% | 0.80 | +7.00% | 1.34 | 11 | 0 |
+
+Overlap diagnostics:
+- opec_2023_04's estimation window (2022-09-27 to 2023-03-20) holds all 11 days of opec_2022_10's [-5,+5] window (2022-09-28 to 2022-10-12).
+- opec_2025_11 shows 0 overlap only because no other 2025 events are in the file yet. The full list will probably add more.
+- No event windows overlap each other (nearby_events is 0 for all three).
+
+Other things seen in the pilot:
+- About 9.9% of opec_2022_10's [-5,+5] CAR comes before day 0 (days -5 to -1).
+- opec_2022_10's residual std (2.08%) is about twice opec_2025_11's (1.07%).
+- The chart caption is cut off at the right edge.
+
+No across-event test has been run: N = 3, below the minimum of 5.
+
 ## Not built yet
 
-- Official-time robustness run: the `--official-time` flag exists, but the run has not been done or reported, because the events CSV has no events yet.
+- Official-time robustness run: the `--official-time` flag exists, but it has not been run on the pilot events (only opec_2022_10 has a leak time, so only it would change).
 - Saudi unilateral subsample report.
 - Outlier-exclusion robustness run.
 - Brent robustness check.
@@ -24,8 +46,8 @@ Last updated: 2026-10-16
 
 ## Next
 
-1. Pick and source three pilot OPEC+ events (the user does this, from primary sources).
-2. Run the pilot and review the overlap diagnostics, then decide the overlap rule (DECISIONS.md).
+1. Decide the overlap rule (DECISIONS.md), using the pilot diagnostics above. The open question is an estimation window that contains another event's window (opec_2023_04 holds opec_2022_10's).
+2. Review the pilot rows' open items: surprise_flag for opec_2022_10 and opec_2025_11, confound_note for all three, and opec_2025_11's notes, which still call the direction provisional even though DECISIONS.md now records pause = hold.
 3. Fill the full OPEC+ list in `events/opec_events.csv`.
 4. Call the across-event tests from `run_opec.py` (needs at least 5 events with status "ok").
 5. Robustness runs: official-time (the `--official-time` flag exists, but the run hasn't been done), outlier exclusion, Saudi subsample, Brent.
