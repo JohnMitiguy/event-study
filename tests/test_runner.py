@@ -50,6 +50,7 @@ def make_events(day0s, ids=None) -> pd.DataFrame:
             "surprise_flag": pd.array([pd.NA] * len(ids), dtype="Int64"),
             "event_time": pd.NaT,
             "used_leak": False,
+            "time_assumed": False,
             "day0": pd.to_datetime(list(day0s)),
         }
     )

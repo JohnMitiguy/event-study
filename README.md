@@ -34,7 +34,10 @@ uv sync                              # install Python 3.13 and the packages
 uv run pytest                        # run the tests
 uv run python scripts/run_opec.py    # run the OPEC+ study
 uv run python scripts/run_opec.py --official-time    # robustness check: official announcement times, not leaks
+uv run python scripts/run_opec.py --shift-assumed   # robustness check: day 0 of time_assumed rows one trading day later
 ```
+
+`--shift-assumed` writes to `*_day0_shifted` files in the same way.
 
 `--official-time` writes to `results/opec_results_official_time.csv`, `results/opec_run_info_official_time.json` and `charts/opec_events_official_time.png`, so it never overwrites the main outputs.
 
@@ -59,6 +62,7 @@ A pilot ran on three events to check the pipeline end to end. No results are rep
 
 - **Confounding news.** A CAR picks up everything that moved XLE relative to SPY in the window, not only the OPEC+ decision. Other news on the same days (an oil supply shock, a big energy company's earnings, a market-wide selloff that hits energy harder) can look like an event effect. The `confound_note` column records known cases, but it can't catch everything, and longer windows are more exposed.
 - **Thin samples.** OPEC+ decisions are infrequent, and some subgroups (for example Saudi unilateral actions, which are reported separately) will have only a handful of events. With few events the cross-event test has little power, and one unusual event can drive the average.
+- **Few events without the assumed times.** In the without-`time_assumed` report only 3 of the 7 cuts remain (below the 5-event minimum), so the cut group shows "too few events" there and is not tested. The all-events cut group and the shifted run do not have this problem, but they rest on assumed announcement times.
 - **Overlapping events.** An event's estimation window skips other events' window days and reaches further back, so it can span more than 120 trading days and its beta comes from a slightly older period (`est_start` shows how far back). Only the other events' window days are skipped, not their run-up days before the window. Only events in the events CSV count: events outside it, including those listed under [Excluded events](#excluded-events), and other event types are not skipped. Events whose event windows overlap each other (`nearby_events` above 0) still measure some of the same days, and nothing adjusts for that.
 - **The test statistic ignores estimation error.** The per-event statistic divides the CAR by the residual standard deviation times the square root of the window length. It treats the fitted alpha and beta as exact, which slightly understates the true uncertainty, more so for longer windows.
 - **Calibration used simulated normal noise.** The test statistic was checked on simulated events with no planted effect, to confirm it doesn't flag effects too often by chance. That simulation used normally distributed returns. Real daily returns have fatter tails, so on real data the test may produce false positives somewhat more often than the calibration suggests.
@@ -90,10 +94,12 @@ One row per event. Fill it in from primary sources only.
 | `confound_note` | Other major news that day, like a market-wide crash. |
 | `source_url` | Primary source for the announcement date and time (OPEC press release, Reuters). |
 | `notes` | Anything else. |
+| `time_assumed` | `1` for a weekday event with no timed source: `announcement_datetime_et` is then the announcement date with a placeholder time (12:00), not a real one. `0` or blank otherwise. Not allowed on a row with a leak time. |
 
 Rules:
 
 - **The time must place the event against the close.** A row needs a time precise enough to place the event against the close. If the source gives only a date, enter a representative time and write `date-only` in `notes`, plus the reason every plausible time gives the same day 0 (for example: Sunday meeting, any time gives Monday; weekday Vienna meeting ending in business hours, before the US close). If the date alone cannot settle day 0, don't enter the row; list it under [Excluded events](#excluded-events) with the reason. Leak times must be exact, from a timestamped source.
+- **Weekday events with no timed source are kept.** Enter the announcement date with a placeholder time, set `time_assumed` to `1` and say so in `notes`. Results are reported three ways: all events, without the `time_assumed` rows, and with day 0 of those rows shifted one trading day later (`--shift-assumed`). The without-`time_assumed` report is a filter on the full run's results, so it leaves the events table alone.
 - **Untimed leaks are not used.** If a leak is known only by date, without a time, leave `leak_datetime_et` and `leak_source_url` blank so the event falls back to `announcement_datetime_et`. Write in `notes` that an untimed leak existed, and list the leak under [Excluded events](#excluded-events).
 - **Leak fields go together.** `leak_datetime_et` and `leak_source_url` are either both filled or both blank.
 - **Leak comes first.** `leak_datetime_et` must be earlier than `announcement_datetime_et`.

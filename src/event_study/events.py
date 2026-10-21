@@ -25,7 +25,13 @@ Row rules:
   daylight-saving gap, 9999-12-31 evening crashed).
 - leak_datetime_et and leak_source_url are both filled or both blank, and a
   leak time must be strictly earlier than the announcement time.
-- decision_group, direction and surprise_flag take only the allowed values.
+- decision_group, direction, surprise_flag and time_assumed take only the
+  allowed values.
+- time_assumed is 1 for a weekday event with no timed source (DECISIONS.md):
+  announcement_datetime_et then holds the announcement date with a
+  placeholder time, not a real one. Blank or 0 means the time is not
+  assumed. A row with a leak time cannot be time_assumed: a timed leak is a
+  known time.
 - source_url is filled in.
 - Day 0 can be computed from the event time (event_days.event_day_zero),
   which fails for times outside the trading calendar.
@@ -55,6 +61,7 @@ from event_study.event_days import (
     CALENDAR_START,
     EASTERN_TZ_NAME,
     event_day_zero,
+    next_session,
     nyse_calendar,
 )
 
@@ -69,10 +76,12 @@ REQUIRED_COLUMNS = (
     "confound_note",
     "source_url",
     "notes",
+    "time_assumed",
 )
 DECISION_GROUPS = ("ministerial", "voluntary_group", "saudi_unilateral")
 DIRECTIONS = ("cut", "hold", "increase")
 SURPRISE_FLAGS = ("", "0", "1")  # blank means unknown
+TIME_ASSUMED_FLAGS = ("", "0", "1")  # blank means 0 (the time is not assumed)
 
 DATETIME_FORMAT = "%Y-%m-%d %H:%M"
 # strptime alone would accept "2024-3-4 9:00"; this insists on exact digits.
@@ -221,6 +230,7 @@ def _check_choices(row: dict, errors: list[str]) -> None:
         ("decision_group", DECISION_GROUPS),
         ("direction", DIRECTIONS),
         ("surprise_flag", SURPRISE_FLAGS),
+        ("time_assumed", TIME_ASSUMED_FLAGS),
     ):
         if row[column] not in allowed:
             shown = ", ".join(repr(a) for a in allowed)
@@ -229,7 +239,7 @@ def _check_choices(row: dict, errors: list[str]) -> None:
         errors.append("source_url is blank")
 
 
-def _check_row(row: dict, use_leak: bool) -> tuple[dict, list[str]]:
+def _check_row(row: dict, use_leak: bool, shift_assumed: bool) -> tuple[dict, list[str]]:
     """Check one row and work out its times.
 
     Returns (parsed values, list of problems). Parsed values are None where
@@ -250,6 +260,9 @@ def _check_row(row: dict, use_leak: bool) -> tuple[dict, list[str]]:
     if announced is not None and leak is not None and leak >= announced:
         errors.append(f"leak time {leak} is not earlier than announcement time {announced}")
     _check_choices(row, errors)
+    time_assumed = row["time_assumed"] == "1"
+    if time_assumed and row["leak_datetime_et"] != "":
+        errors.append("time_assumed is 1 but the row has a leak time, which is a known time")
 
     # Event time rule from CLAUDE.md: the leak if there is one, else the
     # announcement. Untimed leaks never reach here: their row has a blank leak.
@@ -259,6 +272,8 @@ def _check_row(row: dict, use_leak: bool) -> tuple[dict, list[str]]:
     if event_time is not None:
         try:
             day0 = event_day_zero(event_time)
+            if shift_assumed and time_assumed:
+                day0 = next_session(day0)
         except ValueError as err:
             errors.append(f"day 0: {err}")
 
@@ -268,6 +283,7 @@ def _check_row(row: dict, use_leak: bool) -> tuple[dict, list[str]]:
         "event_time": event_time,
         "used_leak": used_leak,
         "day0": day0,
+        "time_assumed": time_assumed,
     }
     return parsed, errors
 
@@ -284,7 +300,9 @@ def _duplicate_id_errors(table: pd.DataFrame) -> list[str]:
     return messages
 
 
-def load_events(path: Path | str, use_leak: bool = True) -> pd.DataFrame:
+def load_events(
+    path: Path | str, use_leak: bool = True, shift_assumed: bool = False
+) -> pd.DataFrame:
     """Read and check an events CSV. Returns one row per event.
 
     use_leak=True (main results): event time is leak_datetime_et if filled,
@@ -292,12 +310,17 @@ def load_events(path: Path | str, use_leak: bool = True) -> pd.DataFrame:
     DECISIONS.md): event time is always the announcement. The leak columns
     are checked either way.
 
+    shift_assumed=True (the third report in DECISIONS.md): day 0 of every
+    time_assumed row moves one trading day later, in case the announcement
+    came after the close. Rows with a known time are not moved.
+
     The returned frame keeps every CSV column (extras too) and:
     - announcement_datetime_et, leak_datetime_et: tz-aware America/New_York
       Timestamps (leak is NaT when blank)
     - surprise_flag: 0, 1, or <NA> when blank (pandas nullable integer)
+    - time_assumed: True or False (blank counts as False)
     - adds event_time (tz-aware), used_leak (bool) and day0 (tz-naive date,
-      matching the returns index)
+      matching the returns index; already shifted when shift_assumed)
 
     A file with only the header row gives an empty frame with these columns.
     Raises ValueError listing every problem found (see the module docstring).
@@ -309,7 +332,7 @@ def load_events(path: Path | str, use_leak: bool = True) -> pd.DataFrame:
     parsed_rows = []
     # to_dict("records") gives one plain dict per row, e.g. row["event_id"].
     for i, row in enumerate(table.to_dict("records")):
-        parsed, row_errors = _check_row(row, use_leak)
+        parsed, row_errors = _check_row(row, use_leak, shift_assumed)
         parsed_rows.append(parsed)
         label = row["event_id"] or "no event_id"
         errors.extend(f"line {i + 2} ({label}): {e}" for e in row_errors)
@@ -325,6 +348,7 @@ def load_events(path: Path | str, use_leak: bool = True) -> pd.DataFrame:
         ("event_time", _EASTERN_DTYPE),
         ("used_leak", bool),
         ("day0", _DAY_DTYPE),
+        ("time_assumed", bool),
     ):
         values = [p[column] for p in parsed_rows]
         events[column] = pd.Series(values, index=table.index, dtype=dtype)

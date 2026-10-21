@@ -30,7 +30,7 @@ Decision: An event is a formal group-level OPEC+ production decision, including 
 
 Decision: Each event carries a decision_group of ministerial (a full OPEC+ ministerial meeting), voluntary_group (the subset making voluntary adjustments) or saudi_unilateral (an action by Saudi Arabia alone); Saudi unilateral events are reported as a separate subsample, not averaged into the main result. Reason: they are a different kind of shock from group decisions, and a blended average would describe neither.
 
-Decision: A row needs an announcement time precise enough to place the event against the close. When the source gives only a date, the row is kept with a representative time and a note explaining why every plausible time gives the same day 0; events where the date alone cannot settle day 0 are excluded and listed with reasons in the README. Leak times must be exact and come from a timestamped source. Reason: requiring exact times would drop most events and bias the sample, while day 0 only depends on the time when the announcement falls near the close.
+Decision: A row needs one of three things: an announcement time, a date where every plausible time gives the same day 0, or the time_assumed flag. A date-only row of the second kind (weekends, holidays, or a meeting that a timed source shows ended well inside the session) is kept with a representative time and a note saying why. A weekday event with no timed source is handled by the time_assumed rule below, not excluded. Leak times must be exact and come from a timestamped source. Reason: requiring exact times would drop about 40% of the candidate events and bias the sample, while day 0 only depends on the time when the announcement falls near the close.
 
 Decision: An event with a leak known only by date uses the official announcement time and is logged in the README with a note, not dropped. Reason: dropping it would silently shrink the sample, and the official time is the conservative fallback.
 
@@ -56,7 +56,7 @@ Decision: The events loader rejects NUL bytes and event years outside the calend
 
 Decision: A benchmark with no variance in an estimation window stops the run, while a near-perfect security fit is recorded as a failed event. Reason: a flat benchmark signals a broken series that would affect many events, but one security can legitimately misbehave on its own.
 
-Decision: run_opec.py stops, instead of logging failed events, if the trading-day check fails or an event needs prices after the cached data ends (rerun with --refresh). Reason: misaligned or missing data would give wrong numbers without any error.
+Decision: run_events stops, instead of logging a failed event, if the trading-day check fails, and run_opec.py stops if an event needs prices after the cached data ends (rerun with --refresh). Reason: misaligned or missing data would give wrong numbers without any error.
 
 Decision: The runner drops no events for overlap: estimation-window overlap is handled by the skipping rule, and nearby_events (events whose widest windows share a day) is reported. Reason: dropping overlapping events would shrink a small sample, and the diagnostic shows where CARs measure the same days.
 
@@ -71,6 +71,26 @@ Decision: Each event's estimation window leaves out every trading day inside ano
 Decision: Subsamples and robustness exclusions (Saudi unilateral, outlier) filter the results of the full run; the events table is never cut before run_events. Reason: removing an event from the table changes later events' estimation windows.
 
 Decision: The official-time run takes its skipped days from its own day 0s, so each run is a complete specification on its own. Reason: a leak-versus-official difference moves a neighbour's skipped days by about a day, and holding the main run's skips fixed would make it an inconsistent hybrid.
+
+Decision: An event is a formal group-level OPEC+ production decision that changes the schedule of production levels versus the last announced one (a new cut, increase, extension, pause, delay or reversal); releases that only implement or reaffirm an already-announced step are not events. Reason: the market reacts to new information, and counting routine confirmations adds events with nothing to measure and packs overlapping windows into the sample.
+
+Decision: The OPEC+ sample starts at the first joint OPEC and non-OPEC meeting in December 2016. Reason: the framework studies OPEC+ decisions, and earlier OPEC-only decisions came from a different institution.
+
+Decision: New OPEC+ event ids use the pattern opec_YYYY_MM_DD, and the three pilot ids are renamed to match. Reason: two events share May 2025 (3 May and 31 May), so opec_YYYY_MM collides.
+
+Decision: When a ministerial release and a voluntary-group release come out on the same day, they are one event row with decision_group voluntary_group, and the ministerial URL goes in notes. Reason: the voluntary release is the one that changes the near-term supply path; the ministerial one mostly extends levels already in place.
+
+Decision: A release qualifies when it sets or changes a monthly production level that no earlier announcement had already set; reaffirming a preset path does not qualify. Same-size steps are tagged repeat and can be dropped in a robustness run. Reason: from Sep 2025 there is no preset path, so every monthly step is a new decision, and the repeat tag lets us test whether predictable steps move prices.
+
+Decision: When an OPEC-only Conference release and the joint ministerial release cover the same decision, the event takes the date of the earliest release that states the decision. Reason: that is the first public information.
+
+Decision: Events whose reaction days coincide (9 and 12 Apr 2020) are treated as one event. Reason: overlapping windows would count one reaction twice and break independence in the across-event tests.
+
+Decision: The 5 Jan 2021 ministerial release is skipped; the Saudi cut that day is entered as a saudi_unilateral event once sourced from the Saudi Energy Ministry statement. Reason: the group release only reaffirmed the plan; the market news was the Saudi cut.
+
+Decision: Meetings that ended with no decision (6 Mar 2020, 1 to 5 Jul 2021) stay out of the main run and are listed in the README. Reason: there is no decision to test, and opec.org has no outcome release for 6 Mar 2020.
+
+Decision: Weekday events with no timed source are entered with the announcement date and flagged time_assumed; results are reported with all events, without those rows, and with day 0 shifted one trading day later. Reason: the [-1,+1] and [-5,+5] windows absorb a one-day dating error, so a missing time adds a little noise instead of invalidating the event. This replaces the old rule that weekday events need a timed source.
 
 ## Not built yet
 - Official-time robustness run (the --official-time flag exists, but the run has not been done)

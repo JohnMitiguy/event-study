@@ -6,6 +6,7 @@ Run from the project root:
     uv run python scripts/run_opec.py --refresh  # re-download prices first
     uv run python scripts/run_opec.py --official-time  # robustness check: ignore leak times
     uv run python scripts/run_opec.py --dates-only  # where each window falls; no returns
+    uv run python scripts/run_opec.py --shift-assumed  # time_assumed rows: day 0 one day later
 
 Steps:
 1. Load XLE and SPY adjusted closes from the cache in data/prices/. Nothing
@@ -24,6 +25,14 @@ Steps:
    settings, events file and code produced the results) and, if any event
    ran, charts/opec_events.png: one small panel per event with abnormal
    returns for days -5 to +5.
+6. Across-event tests (aggregate.across_event_tests) for each event window,
+   on all "ok" events and separately for cut, increase and hold, printed and
+   saved to results/opec_across_event.csv. A group with fewer than 5 "ok"
+   events is not tested and shows "too few events". Every event that is not
+   "ok" is listed with its reason. This is done for two samples (the
+   `sample` column): "all" events, and "firm_only", which leaves out the
+   time_assumed rows (filtered from the same results, never cut from the
+   events table). The time_assumed rows left out are listed too.
 
 With --dates-only the script prints, per event, day 0, the estimation window
 (est_start, est_end, skipped days, span in trading days) and nearby_events,
@@ -35,6 +44,10 @@ is chosen from event dates).
 With --official-time, events use the official announcement time even where
 a leak time exists, and every output name gets "_official_time" added (see
 output_paths), so this run can never overwrite the main results.
+
+With --shift-assumed, day 0 of every time_assumed row moves one trading day
+later (the third report in DECISIONS.md); outputs get "_day0_shifted". It is a
+complete run of its own, so its skipped estimation days come from its own day 0s.
 """
 
 import argparse
@@ -55,7 +68,8 @@ import pandas as pd
 import yfinance
 from matplotlib.ticker import PercentFormatter
 
-from event_study.events import load_events
+from event_study.aggregate import MIN_EVENTS, across_event_tests, excluded_events
+from event_study.events import DIRECTIONS, load_events
 from event_study.prices import (
     cache_path,
     dates_sha256,
@@ -120,22 +134,39 @@ def parse_args() -> argparse.Namespace:
         help="print each event's day 0, estimation window and nearby_events, "
         "then stop: no returns, regressions or CARs, nothing saved",
     )
+    parser.add_argument(
+        "--shift-assumed",
+        action="store_true",
+        help="robustness check: move day 0 of time_assumed rows one trading day later "
+        "and write to separate *_day0_shifted output files",
+    )
     return parser.parse_args()
 
 
-def output_paths(official_time: bool) -> tuple[Path, Path, Path]:
+def run_suffix(official_time: bool, shift_assumed: bool) -> str:
+    """Added to every output name so a robustness run never overwrites the main one."""
+    return ("_official_time" if official_time else "") + ("_day0_shifted" if shift_assumed else "")
+
+
+def output_paths(official_time: bool, shift_assumed: bool = False) -> tuple[Path, Path, Path]:
     """(results CSV, run info JSON, chart PNG) for this run.
 
     Main results use the leak time where present (DECISIONS.md). The
     official-time robustness run adds "_official_time" to every file name,
     so it can never overwrite the main outputs.
     """
-    suffix = "_official_time" if official_time else ""
+    suffix = run_suffix(official_time, shift_assumed)
     return (
         Path("results") / f"opec_results{suffix}.csv",
         Path("results") / f"opec_run_info{suffix}.json",
         Path("charts") / f"opec_events{suffix}.png",
     )
+
+
+def across_event_path(official_time: bool, shift_assumed: bool = False) -> Path:
+    """Where the across-event table goes; the run suffix keeps runs apart."""
+    suffix = run_suffix(official_time, shift_assumed)
+    return Path("results") / f"opec_across_event{suffix}.csv"
 
 
 def common_dates(a: pd.Series, b: pd.Series) -> tuple[pd.Series, pd.Series]:
@@ -212,7 +243,11 @@ def ticker_info(ticker: str, prices: pd.Series) -> dict:
 
 
 def build_run_info(
-    prices: dict[str, pd.Series], returns_used: pd.Series, git: tuple, use_leak: bool
+    prices: dict[str, pd.Series],
+    returns_used: pd.Series,
+    git: tuple,
+    use_leak: bool,
+    shift_assumed: bool = False,
 ) -> dict:
     """Everything needed to tell whether two runs used the same inputs."""
     commit, dirty = git
@@ -227,6 +262,7 @@ def build_run_info(
         "gap": DEFAULT_GAP,
         "event_windows": [list(w) for w in DEFAULT_EVENT_WINDOWS],
         "use_leak": use_leak,
+        "shift_assumed": shift_assumed,
         "events_file": EVENTS_PATH.as_posix(),
         "events_file_sha256": file_sha256(EVENTS_PATH),
         "yfinance_version": yfinance.__version__,
@@ -247,7 +283,10 @@ def print_run_info(info: dict) -> None:
         )
     used = info["returns_used"]
     print(f"  returns used: {used['first_date']} to {used['last_date']}, {used['rows']} rows")
-    print(f"  events file sha256 {info['events_file_sha256'][:12]}, use_leak {info['use_leak']}")
+    print(
+        f"  events file sha256 {info['events_file_sha256'][:12]}, use_leak {info['use_leak']}, "
+        f"shift_assumed {info['shift_assumed']}"
+    )
     commit = info["git_commit"][:12] if info["git_commit"] else "unavailable"
     print(f"  git commit {commit}, uncommitted changes: {info['git_dirty']}")
 
@@ -271,6 +310,101 @@ def print_summary(results: pd.DataFrame) -> None:
         for window in DEFAULT_EVENT_WINDOWS:
             line += f" {row[car_column(window)]:>+14.2%} {row[stat_column(window)]:>6.2f}"
         print(line + f" {row['est_masked_days']:>6} {row['nearby_events']:>6}")
+
+
+def across_event_table(results: pd.DataFrame, windows) -> pd.DataFrame:
+    """One row per window and group: N ok, mean CAR and the four tests.
+
+    Groups are "all" and then each direction (cut, increase, hold). A group
+    is a filter on the finished results table, never on the events table
+    (DECISIONS.md: dropping an event beforehand would change its neighbours'
+    estimation windows). N counts rows with status "ok" only. A group with
+    fewer than MIN_EVENTS of them is not tested: tested is False, the
+    statistics are empty and note says "too few events". Otherwise the numbers come
+    straight from aggregate.across_event_tests, which still raises
+    ValueError for things like identical CARs.
+    """
+    groups = {"all": results} | {d: results[results["direction"] == d] for d in DIRECTIONS}
+    rows = []
+    for window in windows:
+        for group, subset in groups.items():
+            n_ok = int((subset["status"] == "ok").sum())
+            tested = n_ok >= MIN_EVENTS
+            row = {
+                "window": window_label(window),
+                "group": group,
+                "n_ok": n_ok,
+                "tested": tested,
+                "note": "" if tested else f"too few events (N < {MIN_EVENTS})",
+            }
+            if tested:
+                result = across_event_tests(subset, window)
+                tests = result.tests
+                row |= {
+                    "mean_car": result.mean_car,
+                    "cross_sectional_t": tests.loc["cross_sectional_t", "statistic"],
+                    "bmp_t": tests.loc["bmp", "statistic"],
+                    "wilcoxon_p": tests.loc["wilcoxon", "p_value"],
+                    "sign_p": tests.loc["sign", "p_value"],
+                }
+            rows.append(row)
+    columns = [
+        "window", "group", "n_ok", "tested", "mean_car",
+        "cross_sectional_t", "bmp_t", "wilcoxon_p", "sign_p", "note",
+    ]  # fmt: skip
+    return pd.DataFrame(rows, columns=columns)
+
+
+FIRM_ONLY = "firm_only"
+
+
+def firm_only(results: pd.DataFrame) -> pd.DataFrame:
+    """The results without time_assumed rows (a filter, not a rerun)."""
+    return results[~results["time_assumed"]]
+
+
+def time_assumed_excluded(results: pd.DataFrame) -> pd.DataFrame:
+    """The time_assumed rows the firm_only sample leaves out, as event_id, status, reason."""
+    rows = results.loc[results["time_assumed"], ["event_id", "status"]]
+    return rows.assign(reason="time_assumed: announcement time not sourced").reset_index(drop=True)
+
+
+def print_across_event(table: pd.DataFrame, results: pd.DataFrame) -> None:
+    """The across-event table, then every event that is not "ok" and why."""
+    print("\nAcross-event tests (two-sided; events assumed independent, see aggregate.py):")
+    for window, part in table.groupby("window", sort=False):
+        print(f"\n  Window {window}")
+        print(
+            f"    {'group':<9} {'N ok':>4} {'mean CAR':>9} {'CS t':>7} {'BMP t':>7} "
+            f"{'Wilcoxon p':>11} {'sign p':>7}"
+        )
+        for _, row in part.iterrows():
+            line = f"    {row['group']:<9} {row['n_ok']:>4} "
+            if row["tested"]:
+                line += (
+                    f"{row['mean_car']:>+9.2%} {row['cross_sectional_t']:>7.2f} "
+                    f"{row['bmp_t']:>7.2f} {row['wilcoxon_p']:>11.3f} {row['sign_p']:>7.3f}"
+                )
+            else:
+                line += row["note"]
+            print(line)
+    excluded = excluded_events(results)
+    if excluded.empty:
+        print("\nEvents excluded from the across-event tests: none")
+        return
+    print(f"\nEvents excluded from the across-event tests ({len(excluded)}):")
+    directions = results.set_index("event_id")["direction"]
+    for _, row in excluded.iterrows():
+        print(f"  {row['event_id']} ({directions[row['event_id']]}, {row['status']}): {row['reason']}")
+
+
+def print_time_assumed_excluded(results: pd.DataFrame) -> None:
+    """List the time_assumed rows left out of the firm_only sample."""
+    left_out = time_assumed_excluded(results)
+    print(f"\nLeft out of the firm_only sample ({len(left_out)}):")
+    directions = results.set_index("event_id")["direction"]
+    for _, row in left_out.iterrows():
+        print(f"  {row['event_id']} ({directions[row['event_id']]}, {row['status']}): {row['reason']}")
 
 
 def print_dates_only(table: pd.DataFrame) -> None:
@@ -376,7 +510,7 @@ def draw_chart(
     print(f"Saved {chart_path}")
 
 
-def dates_only(prices: dict[str, pd.Series], use_leak: bool) -> None:
+def dates_only(prices: dict[str, pd.Series], use_leak: bool, shift_assumed: bool = False) -> None:
     """--dates-only: print where each event's windows fall, from dates alone.
 
     Zeros stand in for returns (simple_returns would drop the first price
@@ -384,7 +518,7 @@ def dates_only(prices: dict[str, pd.Series], use_leak: bool) -> None:
     """
     placeholders = {t: pd.Series(0.0, index=p.index[1:]) for t, p in prices.items()}
     security, _ = common_dates(placeholders[SECURITY], placeholders[BENCHMARK])
-    events = load_events(EVENTS_PATH, use_leak=use_leak)
+    events = load_events(EVENTS_PATH, use_leak=use_leak, shift_assumed=shift_assumed)
     table = estimation_dates(
         security.index, events, DEFAULT_EST_LENGTH, DEFAULT_GAP, DEFAULT_EVENT_WINDOWS
     )
@@ -394,7 +528,8 @@ def dates_only(prices: dict[str, pd.Series], use_leak: bool) -> None:
 def main() -> None:
     args = parse_args()
     use_leak = not args.official_time
-    results_path, run_info_path, chart_path = output_paths(args.official_time)
+    shift = args.shift_assumed
+    results_path, run_info_path, chart_path = output_paths(args.official_time, shift)
     # Read git first, before this run writes anything.
     git = git_state()
 
@@ -402,7 +537,7 @@ def main() -> None:
     #    then returns.
     prices = {ticker: load_cached(ticker, refresh=args.refresh) for ticker in (SECURITY, BENCHMARK)}
     if args.dates_only:
-        dates_only(prices, use_leak)
+        dates_only(prices, use_leak, shift)
         return
     security = simple_returns(prices[SECURITY])
     benchmark = simple_returns(prices[BENCHMARK])
@@ -412,7 +547,7 @@ def main() -> None:
     security, benchmark = common_dates(security, benchmark)
 
     # 3-4. Events, the data-coverage check, and the market model.
-    events = load_events(EVENTS_PATH, use_leak=use_leak)
+    events = load_events(EVENTS_PATH, use_leak=use_leak, shift_assumed=shift)
     stop_if_data_too_short(events, security.index[-1])
     results, abnormal = run_events(
         events, security, benchmark, DEFAULT_EST_LENGTH, DEFAULT_GAP, DEFAULT_EVENT_WINDOWS
@@ -423,10 +558,28 @@ def main() -> None:
     results_path.parent.mkdir(parents=True, exist_ok=True)
     results.to_csv(results_path, index=False)
     print(f"Saved {results_path}")
-    info = build_run_info(prices, security, git, use_leak)
+    info = build_run_info(prices, security, git, use_leak, shift)
     run_info_path.write_text(json.dumps(info, indent=2) + "\n", encoding="utf-8")
     print_run_info(info)
     print(f"Saved {run_info_path}")
+
+    # 6. Across-event tests, filtered from the results above.
+    all_table = across_event_table(results, DEFAULT_EVENT_WINDOWS)
+    print("\n=== Sample: all events ===")
+    print_across_event(all_table, results)
+    firm_results = firm_only(results)
+    firm_table = across_event_table(firm_results, DEFAULT_EVENT_WINDOWS)
+    print("\n=== Sample: without time_assumed rows ===")
+    print_across_event(firm_table, firm_results)
+    print_time_assumed_excluded(results)
+    across = pd.concat(
+        [all_table.assign(sample="all"), firm_table.assign(sample=FIRM_ONLY)], ignore_index=True
+    )
+    across = across[["sample", *all_table.columns]]
+    across_path = across_event_path(args.official_time, shift)
+    across.to_csv(across_path, index=False)
+    print(f"Saved {across_path}")
+
     if (results["status"] == "ok").any():
         draw_chart(results, abnormal, security.index[-1], chart_path, results_path)
     else:

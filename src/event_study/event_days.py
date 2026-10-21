@@ -92,6 +92,19 @@ def event_day_zero(announced_at: datetime) -> pd.Timestamp:
     return cal.date_to_session(day, direction="next")
 
 
+def next_session(day: pd.Timestamp) -> pd.Timestamp:
+    """The NYSE session after `day`, which must itself be a session.
+
+    Used to move day 0 one trading day later. Raises ValueError if `day` is
+    not a session or is the last one in the calendar.
+    """
+    ts = pd.Timestamp(day)
+    cal = nyse_calendar()
+    if ts not in cal.sessions or ts == cal.last_session:
+        raise ValueError(f"{ts.date()} has no next NYSE session in the calendar")
+    return cal.next_session(ts)
+
+
 def session_position(day: pd.Timestamp) -> int:
     """Row number of `day` in the NYSE session list (CALENDAR_START onward).
 

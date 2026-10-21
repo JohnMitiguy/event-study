@@ -73,6 +73,7 @@ CARRIED_COLUMNS = (
     "event_time",
     "used_leak",
     "day0",
+    "time_assumed",
 )
 FIT_COLUMNS = ("alpha", "beta", "resid_std", "n")
 ESTIMATION_COLUMNS = ("est_start", "est_end", "est_masked_days")

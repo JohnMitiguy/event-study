@@ -8,11 +8,13 @@ main(), so nothing is downloaded or written.
 import importlib.util
 from pathlib import Path
 
+import numpy as np
 import pandas as pd
 
 # pytest puts the tests/ folder on the import path (see test_runner.py).
 from test_events import valid_row, write_events
 
+from event_study.aggregate import across_event_tests
 from event_study.event_days import nyse_calendar
 
 SCRIPT = Path(__file__).parents[1] / "scripts" / "run_opec.py"
@@ -89,3 +91,124 @@ def test_dates_only_flag_is_parsed(monkeypatch):
     assert run_opec.parse_args().dates_only is True
     monkeypatch.setattr("sys.argv", ["run_opec.py"])
     assert run_opec.parse_args().dates_only is False
+
+
+def simulated_results(directions, failed_row=None):
+    """run_events results on long simulated returns, one event per direction.
+
+    Events are 25 sessions apart starting at row 150, so each has a full
+    estimation window and none overlaps another. failed_row adds one more
+    event at that row (row 20 has too little history, so it fails).
+    """
+    from event_study.runner import run_events
+    from event_study.simulate import fake_returns
+
+    security, benchmark = fake_returns(np.random.default_rng(7), n_days=150 + 25 * len(directions) + 20)
+    rows = [150 + 25 * i for i in range(len(directions))]
+    ids = [f"sim_{i}" for i in range(len(directions))]
+    if failed_row is not None:
+        rows, ids, directions = [*rows, failed_row], [*ids, "sim_failed"], [*directions, "cut"]
+    events = pd.DataFrame(
+        {
+            "event_id": ids,
+            "decision_group": "ministerial",
+            "direction": directions,
+            "surprise_flag": pd.array([pd.NA] * len(ids), dtype="Int64"),
+            "event_time": pd.NaT,
+            "used_leak": False,
+            "day0": security.index[rows],
+            "time_assumed": False,
+        }
+    )
+    results, _ = run_events(events, security, benchmark, 120, 10, ((-1, 1), (-5, 5)))
+    return results
+
+
+def test_across_event_table_on_simulated_data():
+    run_opec = load_script()
+    directions = ["cut"] * 6 + ["increase"] * 5 + ["hold"] * 4
+    results = simulated_results(directions, failed_row=20)
+    assert (results["status"] == "failed").sum() == 1
+    table = run_opec.across_event_table(results, ((-1, 1), (-5, 5)))
+
+    assert list(table["window"].unique()) == ["[-1,+1]", "[-5,+5]"]
+    wide = table[table["window"] == "[-1,+1]"].set_index("group")
+    # The failed event is a cut and is not counted: 6 cuts ok, not 7.
+    assert wide["n_ok"].to_dict() == {"all": 15, "cut": 6, "increase": 5, "hold": 4}
+    assert wide["tested"].to_dict() == {"all": True, "cut": True, "increase": True, "hold": False}
+    assert wide.loc["hold", "note"] == "too few events (N < 5)"
+    assert wide.loc["hold", ["mean_car", "bmp_t", "sign_p"]].isna().all()
+
+    # Numbers are exactly what aggregate.across_event_tests gives on the same rows.
+    direct = across_event_tests(results[results["direction"] == "cut"], (-1, 1))
+    assert wide.loc["cut", "mean_car"] == direct.mean_car
+    assert wide.loc["cut", "cross_sectional_t"] == direct.tests.loc["cross_sectional_t", "statistic"]
+    assert wide.loc["cut", "bmp_t"] == direct.tests.loc["bmp", "statistic"]
+    assert wide.loc["cut", "wilcoxon_p"] == direct.tests.loc["wilcoxon", "p_value"]
+    assert wide.loc["cut", "sign_p"] == direct.tests.loc["sign", "p_value"]
+
+
+def test_pilot_sized_results_are_not_tested(capsys):
+    run_opec = load_script()
+    results = simulated_results(["cut", "hold", "cut"])
+    table = run_opec.across_event_table(results, ((-1, 1), (-5, 5)))
+    assert not table["tested"].any()
+    assert (table["note"] == "too few events (N < 5)").all()
+    run_opec.print_across_event(table, results)
+    out = capsys.readouterr().out
+    assert out.count("too few events (N < 5)") == 8  # 4 groups x 2 windows
+    assert "excluded from the across-event tests: none" in out
+
+
+def test_print_lists_every_excluded_event_with_reason(capsys):
+    run_opec = load_script()
+    results = simulated_results(["cut"] * 5, failed_row=20)
+    table = run_opec.across_event_table(results, ((-1, 1),))
+    run_opec.print_across_event(table, results)
+    out = capsys.readouterr().out
+    assert "excluded from the across-event tests (1)" in out
+    failed_line = next(line for line in out.splitlines() if "sim_failed" in line)
+    assert "failed" in failed_line
+    assert results.loc[results["event_id"] == "sim_failed", "error"].iloc[0] in failed_line
+
+
+def test_across_event_path_keeps_official_time_separate():
+    run_opec = load_script()
+    assert run_opec.across_event_path(False) == Path("results") / "opec_across_event.csv"
+    assert run_opec.across_event_path(True) == Path("results") / "opec_across_event_official_time.csv"
+
+
+def test_shift_assumed_output_paths_are_separate():
+    run_opec = load_script()
+    main = set(run_opec.output_paths(official_time=False))
+    shifted = set(run_opec.output_paths(official_time=False, shift_assumed=True))
+    assert main.isdisjoint(shifted)
+    assert run_opec.across_event_path(False, True) == (
+        Path("results") / "opec_across_event_day0_shifted.csv"
+    )
+
+
+def test_shift_assumed_flag_is_parsed(monkeypatch):
+    run_opec = load_script()
+    monkeypatch.setattr("sys.argv", ["run_opec.py", "--shift-assumed"])
+    assert run_opec.parse_args().shift_assumed is True
+
+
+def test_firm_only_cut_group_with_three_events_says_too_few(capsys):
+    """Without time_assumed rows only 3 cuts remain: shown as too few, no crash."""
+    run_opec = load_script()
+    results = simulated_results(["cut"] * 6 + ["increase"] * 6)
+    results["time_assumed"] = [False, False, False, True, True, True] + [False] * 6
+    firm = run_opec.firm_only(results)
+    table = run_opec.across_event_table(firm, ((-1, 1),))
+    by_group = table.set_index("group")
+    assert by_group.loc["cut", "n_ok"] == 3
+    assert not by_group.loc["cut", "tested"]
+    assert by_group.loc["cut", "note"] == "too few events (N < 5)"
+    assert by_group.loc["all", "tested"]
+    run_opec.print_across_event(table, firm)
+    run_opec.print_time_assumed_excluded(results)
+    out = capsys.readouterr().out
+    assert "too few events (N < 5)" in out
+    assert "Left out of the firm_only sample (3)" in out
+    assert out.count("time_assumed: announcement time not sourced") == 3

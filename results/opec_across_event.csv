@@ -1,0 +1,9 @@
+window,group,n_ok,tested,mean_car,cross_sectional_t,bmp_t,wilcoxon_p,sign_p,note
+"[-1,+1]",all,3,False,,,,,,not tested (N < 5)
+"[-1,+1]",cut,2,False,,,,,,not tested (N < 5)
+"[-1,+1]",hold,1,False,,,,,,not tested (N < 5)
+"[-1,+1]",increase,0,False,,,,,,not tested (N < 5)
+"[-5,+5]",all,3,False,,,,,,not tested (N < 5)
+"[-5,+5]",cut,2,False,,,,,,not tested (N < 5)
+"[-5,+5]",hold,1,False,,,,,,not tested (N < 5)
+"[-5,+5]",increase,0,False,,,,,,not tested (N < 5)

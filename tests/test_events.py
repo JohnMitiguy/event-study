@@ -27,6 +27,7 @@ def valid_row(**changes) -> dict:
         "confound_note": "",
         "source_url": "https://example.com/announcement",
         "notes": "fake row for tests",
+        "time_assumed": "",
     }
     return row | changes
 
@@ -133,8 +134,52 @@ def test_extra_columns_kept_and_spaces_trimmed(tmp_path):
 def test_header_only_gives_empty_frame(tmp_path):
     events = load_events(write_events(tmp_path, []))
     assert len(events) == 0
-    for column in [*REQUIRED_COLUMNS, "event_time", "used_leak", "day0"]:
+    for column in [*REQUIRED_COLUMNS, "event_time", "used_leak", "day0", "time_assumed"]:
         assert column in events.columns
+
+
+# --- time_assumed ------------------------------------------------------------
+
+
+def test_time_assumed_defaults_to_false_and_parses(tmp_path):
+    assert not load_one(tmp_path)["time_assumed"]
+    assert load_one(tmp_path, time_assumed="1")["time_assumed"]
+    assert not load_one(tmp_path, time_assumed="0")["time_assumed"]
+
+
+def test_time_assumed_rejects_other_values(tmp_path):
+    with pytest.raises(ValueError, match="time_assumed is 'yes'"):
+        load_one(tmp_path, time_assumed="yes")
+
+
+def test_time_assumed_with_leak_is_rejected(tmp_path):
+    with pytest.raises(ValueError, match="time_assumed is 1 but the row has a leak time"):
+        load_one(
+            tmp_path,
+            time_assumed="1",
+            leak_datetime_et="2024-06-04 09:00",
+            leak_source_url="https://example.com/leak",
+        )
+
+
+def shifted_day0(tmp_path, announced, time_assumed):
+    path = write_events(
+        tmp_path, [valid_row(announcement_datetime_et=announced, time_assumed=time_assumed)]
+    )
+    return load_events(path, shift_assumed=True).iloc[0]["day0"]
+
+
+def test_shift_moves_only_time_assumed_rows(tmp_path):
+    # Tue 2024-06-04 10:00: day 0 is that Tuesday, shifted to Wednesday.
+    assert shifted_day0(tmp_path, "2024-06-04 10:00", "1") == pd.Timestamp("2024-06-05")
+    assert shifted_day0(tmp_path, "2024-06-04 10:00", "0") == pd.Timestamp("2024-06-04")
+    # Without the option nothing moves.
+    assert load_one(tmp_path, time_assumed="1")["day0"] == pd.Timestamp("2024-06-04")
+
+
+def test_shift_skips_weekend_and_holiday(tmp_path):
+    # Fri 2024-05-24 12:00 -> Mon 27 May is Memorial Day -> Tue 28 May.
+    assert shifted_day0(tmp_path, "2024-05-24 12:00", "1") == pd.Timestamp("2024-05-28")
 
 
 # --- Daylight saving ----------------------------------------------------------

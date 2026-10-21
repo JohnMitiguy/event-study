@@ -184,6 +184,7 @@ def test_on_run_events_output():
             "surprise_flag": pd.array([pd.NA] * len(positions), dtype="Int64"),
             "event_time": pd.NaT,
             "used_leak": False,
+            "time_assumed": False,
             "day0": security.index[positions],
         }
     )
