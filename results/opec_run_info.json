@@ -41,6 +41,6 @@
   "events_file_sha256": "68f40b8f5621dde8432ccefcd19d9f3fd9d91aab7598a4c5af969bced300bd3f",
   "yfinance_version": "1.7.0",
   "pandas_version": "3.0.6",
-  "git_commit": "e9d534828ab28f225a75c62b0473bdcc636a2e56",
+  "git_commit": "f0f6b0df3499a7bc0a4ca618fac0c83e2ccf5805",
   "git_dirty": false
 }
