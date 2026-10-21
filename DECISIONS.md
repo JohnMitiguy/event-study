@@ -66,6 +66,12 @@ Decision: A pause or delay of scheduled increases is tagged hold, even when the 
 
 Decision: Failed events still mask other events' estimation windows; if day -10 is masked the window ends on the latest unmasked day before it; there is no cap on how far back the window reaches yet; only earlier events mask later ones. Reason: the market reacted whether or not an event's own regression ran, a cap will be chosen from event dates before any CARs are read, and a later event cannot be known when an earlier one is estimated.
 
+Decision: Each event's estimation window leaves out every trading day inside another event's widest configured event window (all other rows of the same events table, ok or failed; not their run-up days, not events outside the table) and reaches further back to keep est_length days. Reason: those days carry another event's reaction, which would inflate resid_std and bend alpha and beta, and a fixed est_length keeps every regression the same size.
+
+Decision: Subsamples and robustness exclusions (Saudi unilateral, outlier) filter the results of the full run; the events table is never cut before run_events. Reason: removing an event from the table changes later events' estimation windows.
+
+Decision: The official-time run takes its skipped days from its own day 0s, so each run is a complete specification on its own. Reason: a leak-versus-official difference moves a neighbour's skipped days by about a day, and holding the main run's skips fixed would make it an inconsistent hybrid.
+
 ## Not built yet
 - Official-time robustness run (the --official-time flag exists, but the run has not been done)
 - Saudi unilateral subsample report
