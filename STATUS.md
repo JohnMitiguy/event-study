@@ -8,11 +8,11 @@ Last updated: 2026-10-21
 - Events loader for `events/opec_events.csv`, with leak-time handling and validation that reports every bad row at once.
 - Event day 0 logic (actual closes, early closes, weekends, holidays) and trading-day windows.
 - Market model (OLS with intercept), abnormal returns, CARs and per-event test statistics, calibrated on simulated no-effect events.
-- Runner that runs every event, records failed events with reasons, and reports nearby events.
+- Runner that runs every event, records failed events with reasons, and reports nearby events. `run_events` checks both return series against the NYSE calendar and raises a ValueError for non-session dates or missing sessions (moved from `run_opec.py`, so every caller gets it). It cannot see a series cut short at either end. `simulate.fake_returns` now uses real NYSE sessions (same numbers, new dates).
 - Estimation windows skip every day inside another event's widest window (other events in the same run, ok or failed) and reach further back to keep 120 days; if day -10 is skipped the window ends on the latest unskipped day before it. No cap on how far back. The runner reports `est_start`, `est_end` and `est_masked_days`; `est_overlap_days` is gone. A later event can never change an earlier event's row (tested by hand and as a property test, along with a property test that no estimation day lies inside another event's window).
 - Across-event tests in `aggregate.py`: cross-sectional t, standardized-CAR (BMP), Wilcoxon and sign test. A simulated power analysis is in `scripts/across_event_demo.py`, which also prints a formula-based count of events needed for 80% power: 26 ok events on [-1,+1], assuming a 1% day-0 abnormal return and 1% daily residual noise (10 on [0,0], 89 on [-5,+5]). That is an illustration, not a recorded target. The three counts are tested in `tests/test_across_event_demo.py`.
 - Methodology-reviewer Bash hook in `.claude/hooks/reviewer_bash_guard.py`: an allowlist of commands and, for each, the flags it may take; pytest file arguments must be relative paths under `tests/` with no `..` or backslash. Tested in `tests/test_reviewer_hook.py`, including a test that runs the hook command line from the agent file's frontmatter through bash (it skips with a reason if bash or uv can't be found). It is a backstop and fails open if it can't start.
-- `scripts/run_opec.py`: the OPEC+ run (XLE vs SPY), writing results, run info and a per-event chart. `--official-time` uses official announcement times and writes to separate `*_official_time` files.
+- `scripts/run_opec.py`: the OPEC+ run (XLE vs SPY), writing results, run info and a per-event chart. `--official-time` uses official announcement times and writes to separate `*_official_time` files. `--dates-only` prints per event the day 0, est_start, est_end, est_masked_days, est_span (trading days, inclusive) and nearby_events, computing no returns, regressions or CARs and saving nothing (`runner.estimation_dates`).
 - Tests (including property-based and fuzz tests), Ruff, and CI.
 
 ## Pilot (run 2026-10-21)
@@ -48,11 +48,12 @@ No across-event test has been run: N = 3, below the minimum of 5.
 
 ## Next
 
-1. Update the DECISIONS.md lines the skipping rule made out of date (the user edits DECISIONS.md; old text and proposed replacements were given in the 2026-10-21 session).
-2. Review the pilot rows' open items: surprise_flag for opec_2022_10 and opec_2025_11, and confound_note for all three. (opec_2025_11's notes now say it is tagged hold per the pause rule.)
-3. Fill the full OPEC+ list in `events/opec_events.csv`.
-4. Call the across-event tests from `run_opec.py` (needs at least 5 events with status "ok").
-5. Robustness runs: official-time (the `--official-time` flag exists, but the run hasn't been done), outlier exclusion, Saudi subsample, Brent.
+1. Set the look-back limit and the rule for routine monthly decisions from `--dates-only` output before reading any CARs.
+2. Before any non-NYSE security such as Brent, confirm the calendar check covers it.
+3. Review the pilot rows' open items: surprise_flag for opec_2022_10 and opec_2025_11, and confound_note for all three. (opec_2025_11's notes now say it is tagged hold per the pause rule.)
+4. Fill the full OPEC+ list in `events/opec_events.csv`.
+5. Call the across-event tests from `run_opec.py` (needs at least 5 events with status "ok").
+6. Robustness runs: official-time (the `--official-time` flag exists, but the run hasn't been done), outlier exclusion, Saudi subsample, Brent.
    - The outlier-exclusion run must test the estimation days actually used, not the span from est_start to est_end: the span includes the skipped days of other events' windows.
    - Subsamples and exclusions should filter the results of the full run, not the events table before it: dropping an event from the table changes the estimation windows of the events after it.
-6. Decide whether to record a power target in DECISIONS.md (the user's call). Until then `/check-results` reports ok counts but does not judge power.
+7. Decide whether to record a power target in DECISIONS.md (the user's call). Until then `/check-results` reports ok counts but does not judge power.

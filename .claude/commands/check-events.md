@@ -19,4 +19,6 @@ Validate events/opec_events.csv against the rules in README.md (section "Events 
 
 You have no web access, so you cannot open source_url. End with a table of every row whose date, time or outcome still needs checking against its primary source: event_id, what to check (date, time, time zone conversion, outcome, leak time), and the URL to open. Don't judge whether a date or outcome is correct from memory.
 
+Tag each numbered finding **Must fix** (wrong or misleading now), **Should fix** (a real risk or gap, not urgent) or **Note** (worth knowing, no action needed).
+
 Extra notes from the user, if any: $ARGUMENTS

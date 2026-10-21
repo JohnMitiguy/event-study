@@ -7,13 +7,15 @@ Setup (all returns are decimals, 0.01 = 1%):
     benchmark_t = Normal(mean 0, std BENCHMARK_STD)
     security_t  = TRUE_ALPHA + TRUE_BETA * benchmark_t + Normal(mean 0, std NOISE_STD)
 
-Dates are Monday-Friday business days from pd.bdate_range. They ignore
-exchange holidays, which is fine for fake data.
+Dates are real NYSE sessions starting on or after FIRST_DATE, because
+run_events rejects a return series that is not exactly the NYSE sessions.
+The returns do not depend on the dates.
 """
 
 import numpy as np
 import pandas as pd
 
+from event_study.event_days import nyse_calendar
 from event_study.market_model import car_test, fit_market_model
 from event_study.windows import slice_windows, window_label
 
@@ -40,12 +42,13 @@ NULL_MASTER_SEED = 2026
 def fake_returns(
     rng: np.random.Generator, n_days: int = N_DAYS
 ) -> tuple[pd.Series, pd.Series]:
-    """(security, benchmark) daily returns for n_days business days.
+    """(security, benchmark) daily returns for n_days NYSE sessions.
 
     Draws all benchmark returns first, then all noise, from rng. With the
     same seed you get the same numbers every time.
     """
-    dates = pd.bdate_range(FIRST_DATE, periods=n_days)
+    sessions = nyse_calendar().sessions
+    dates = sessions[sessions >= pd.Timestamp(FIRST_DATE)][:n_days]
     benchmark = rng.normal(0.0, BENCHMARK_STD, n_days)
     noise = rng.normal(0.0, NOISE_STD, n_days)
     security = TRUE_ALPHA + TRUE_BETA * benchmark + noise

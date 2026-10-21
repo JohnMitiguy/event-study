@@ -16,4 +16,6 @@ Then list:
 
 Don't edit DECISIONS.md.
 
+Tag each numbered finding **Must fix** (wrong or misleading now), **Should fix** (a real risk or gap, not urgent) or **Note** (worth knowing, no action needed).
+
 Extra notes from the user, if any: $ARGUMENTS

@@ -3,7 +3,7 @@
 hypothesis draws random settings, a random stretch of real NYSE sessions
 (the overlap diagnostics count sessions, so the dates must be real ones),
 random market-model returns, random damage to those returns (NaN, inf, a
-perfect-fit stretch, a benchmark row missing), and 0-5 events whose day 0 is
+perfect-fit stretch, a benchmark cut short at one end), and 0-5 events whose day 0 is
 anywhere in the data or just outside it. Then it checks the shape of the
 results table, which must hold whatever happens to each event, that no ok
 event's estimation window uses a day inside another event's widest window,
@@ -77,8 +77,10 @@ def run_inputs(draw) -> dict:
     security_returns = pd.Series(security, index=dates)
     benchmark_returns = pd.Series(benchmark, index=dates)
     if draw(st.integers(0, 4)) == 0:
-        # A benchmark with one day missing: positions no longer line up.
-        benchmark_returns = benchmark_returns.drop(dates[draw(st.integers(0, n - 1))])
+        # A benchmark cut short at one end: still all NYSE sessions, so the
+        # calendar check passes, but the two series no longer share dates.
+        # (A day missing in the middle stops the run; tested in test_runner.py.)
+        benchmark_returns = benchmark_returns.drop(dates[draw(st.sampled_from([0, n - 1]))])
 
     # Day 0 anywhere in the data, or up to MARGIN sessions before or after it.
     day0_rows = st.integers(min_value=first_row - MARGIN, max_value=first_row + n - 1 + MARGIN)
@@ -254,8 +256,13 @@ def test_later_events_never_change_earlier_rows(inputs, data):
     # event in the run failed (None in an all-ok run, a string column once a
     # later event fails), but the messages must be the same.
     assert earlier["error"].fillna("").tolist() == before["error"].fillna("").tolist()
+    # check_index_type=False: with no ok event the empty table's event_id
+    # index has a different type, which says nothing about the numbers.
     pd.testing.assert_frame_equal(
-        after_abnormal.loc[before_abnormal.index], before_abnormal, check_exact=True
+        after_abnormal.loc[before_abnormal.index],
+        before_abnormal,
+        check_exact=True,
+        check_index_type=False,
     )
 
 

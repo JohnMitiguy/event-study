@@ -16,4 +16,6 @@ Read results/opec_results.csv and results/opec_run_info.json (and the `*_officia
 - **Sample size**: N of ok events overall and per decision_group. Note that saudi_unilateral events are a separate subsample (DECISIONS.md) and the across-event tests need at least 5 ok events. No power target is recorded, so don't judge whether N is enough: report the counts and say plainly that power can't be judged without a recorded target. The events-needed figure printed by scripts/across_event_demo.py is an illustration under assumed numbers, not a target.
 - **Skeptical reading**: what the numbers do and don't show. Which events drive any large CARs, whether the sign holds without the largest one, whether known confounds (`confound_note`) sit on those days, and which events need a primary-source check of their date, time or outcome before the number can be trusted. A null result is a valid result; say so if that's what it is.
 
+Tag each numbered finding **Must fix** (wrong or misleading now), **Should fix** (a real risk or gap, not urgent) or **Note** (worth knowing, no action needed).
+
 Extra notes from the user, if any: $ARGUMENTS

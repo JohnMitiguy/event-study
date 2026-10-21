@@ -5,14 +5,16 @@ Run from the project root:
     uv run python scripts/run_opec.py            # use the cached prices as they are
     uv run python scripts/run_opec.py --refresh  # re-download prices first
     uv run python scripts/run_opec.py --official-time  # robustness check: ignore leak times
+    uv run python scripts/run_opec.py --dates-only  # where each window falls; no returns
 
 Steps:
 1. Load XLE and SPY adjusted closes from the cache in data/prices/. Nothing
    is downloaded unless a cache file is missing or --refresh is passed, so
    re-running gives the same numbers. Turn them into simple daily returns.
-2. Check both return series against the NYSE trading calendar. A failure
-   STOPS the script: windows count rows, so a missing day would shift every
-   window without any error.
+2. Line the two return series up date for date. run_events checks both
+   against the NYSE trading calendar and STOPS with a ValueError on a
+   failure: windows count rows, so a missing day would shift every window
+   without any error.
 3. Load events/opec_events.csv (leak time used where present). If any
    event's widest window ends after the cached data ends, STOP and ask for
    --refresh rather than recording those events as failed.
@@ -22,6 +24,13 @@ Steps:
    settings, events file and code produced the results) and, if any event
    ran, charts/opec_events.png: one small panel per event with abnormal
    returns for days -5 to +5.
+
+With --dates-only the script prints, per event, day 0, the estimation window
+(est_start, est_end, skipped days, span in trading days) and nearby_events,
+then stops. No returns, regressions or CARs are computed, and nothing is
+saved. It uses the same events, skipping rule and calendar check as a real run,
+so it can be run before reading any CAR (DECISIONS.md: the look-back limit
+is chosen from event dates).
 
 With --official-time, events use the official announcement time even where
 a leak time exists, and every output name gets "_official_time" added (see
@@ -46,7 +55,6 @@ import pandas as pd
 import yfinance
 from matplotlib.ticker import PercentFormatter
 
-from event_study.event_days import check_trading_days
 from event_study.events import load_events
 from event_study.prices import (
     cache_path,
@@ -57,6 +65,7 @@ from event_study.prices import (
 )
 from event_study.runner import (
     car_column,
+    estimation_dates,
     events_needing_later_data,
     run_events,
     stat_column,
@@ -105,6 +114,12 @@ def parse_args() -> argparse.Namespace:
         help="robustness check: use official announcement times, not leak times, "
         "and write to separate *_official_time output files",
     )
+    parser.add_argument(
+        "--dates-only",
+        action="store_true",
+        help="print each event's day 0, estimation window and nearby_events, "
+        "then stop: no returns, regressions or CARs, nothing saved",
+    )
     return parser.parse_args()
 
 
@@ -123,21 +138,14 @@ def output_paths(official_time: bool) -> tuple[Path, Path, Path]:
     )
 
 
-def check_or_stop(ticker: str, returns: pd.Series) -> None:
-    """Run the trading-day check; on failure print why and stop the script."""
-    try:
-        check_trading_days(returns)
-    except ValueError as err:
-        raise SystemExit(f"{ticker}: trading-day check FAILED, stopping.\n{err}") from None
-    first, last = returns.index[0].date(), returns.index[-1].date()
-    print(f"{ticker}: trading days OK ({first} to {last}, {len(returns)} days)")
-
-
 def common_dates(a: pd.Series, b: pd.Series) -> tuple[pd.Series, pd.Series]:
     """Trim both series to the dates they share.
 
-    Both have passed check_trading_days, so between a shared first and last
-    date they hold exactly the same NYSE sessions; only the ends can differ.
+    Each series is expected to hold every NYSE session between its own first
+    and last date (run_events checks this afterwards), so between a shared
+    first and last date they hold the same sessions; only the ends can differ.
+    A series with a hole is caught by run_events, or here as "dates still
+    differ" if the other series has no hole.
     """
     first = max(a.index[0], b.index[0])
     last = min(a.index[-1], b.index[-1])
@@ -265,6 +273,29 @@ def print_summary(results: pd.DataFrame) -> None:
         print(line + f" {row['est_masked_days']:>6} {row['nearby_events']:>6}")
 
 
+def print_dates_only(table: pd.DataFrame) -> None:
+    """Per event: day 0, estimation window, skipped days, span and neighbours.
+
+    est_span is the trading days from est_start to est_end inclusive. An
+    event that lacks the data for its windows shows its reason instead.
+    """
+    print(f"\n{len(table)} event(s); no returns, regressions or CARs computed.\n")
+    print(
+        f"{'event_id':<24} {'day 0':<10} {'est_start':<10} {'est_end':<10} "
+        f"{'masked':>6} {'est_span':>8} {'nearby':>6}"
+    )
+    for _, row in table.iterrows():
+        line = f"{row['event_id']:<24} {row['day0'].date()!s:<10} "
+        if pd.isna(row["error"]):
+            line += (
+                f"{row['est_start'].date()!s:<10} {row['est_end'].date()!s:<10} "
+                f"{row['est_masked_days']:>6} {row['est_span_days']:>8} {row['nearby_events']:>6}"
+            )
+        else:
+            line += f"{'-':<10} {'-':<10} {'-':>6} {'-':>8} {row['nearby_events']:>6}  {row['error']}"
+        print(line)
+
+
 def wrap_caption(text: str, fig_width: float) -> str:
     """Break text into lines that fit across a figure fig_width inches wide.
 
@@ -345,6 +376,21 @@ def draw_chart(
     print(f"Saved {chart_path}")
 
 
+def dates_only(prices: dict[str, pd.Series], use_leak: bool) -> None:
+    """--dates-only: print where each event's windows fall, from dates alone.
+
+    Zeros stand in for returns (simple_returns would drop the first price
+    row, so the dates are prices.index[1:]); nothing is computed from prices.
+    """
+    placeholders = {t: pd.Series(0.0, index=p.index[1:]) for t, p in prices.items()}
+    security, _ = common_dates(placeholders[SECURITY], placeholders[BENCHMARK])
+    events = load_events(EVENTS_PATH, use_leak=use_leak)
+    table = estimation_dates(
+        security.index, events, DEFAULT_EST_LENGTH, DEFAULT_GAP, DEFAULT_EVENT_WINDOWS
+    )
+    print_dates_only(table)
+
+
 def main() -> None:
     args = parse_args()
     use_leak = not args.official_time
@@ -355,12 +401,14 @@ def main() -> None:
     # 1. Prices from the cache (downloaded only if missing or --refresh),
     #    then returns.
     prices = {ticker: load_cached(ticker, refresh=args.refresh) for ticker in (SECURITY, BENCHMARK)}
+    if args.dates_only:
+        dates_only(prices, use_leak)
+        return
     security = simple_returns(prices[SECURITY])
     benchmark = simple_returns(prices[BENCHMARK])
 
-    # 2. Calendar check, then line the two series up date for date.
-    check_or_stop(SECURITY, security)
-    check_or_stop(BENCHMARK, benchmark)
+    # 2. Line the two series up date for date. (run_events checks the dates
+    #    against the NYSE calendar.)
     security, benchmark = common_dates(security, benchmark)
 
     # 3-4. Events, the data-coverage check, and the market model.

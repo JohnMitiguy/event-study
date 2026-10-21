@@ -48,13 +48,13 @@ Skipped days and nearby_events are counted by NYSE session position
 (event_days.session_position), not by row in the returns data, so events
 whose day 0 is before or after the data still count. This matches the
 windows' row counting only when the data holds every NYSE session, which
-scripts/run_opec.py checks.
+run_events checks for both return series (a ValueError stops the run).
 """
 
 import pandas as pd
 
 from event_study.errors import EventDataError
-from event_study.event_days import nyse_calendar, session_position
+from event_study.event_days import check_trading_days, nyse_calendar, session_position
 from event_study.market_model import abnormal_returns, car_test, fit_market_model
 from event_study.windows import (
     DEFAULT_EST_LENGTH,
@@ -135,6 +135,21 @@ def _check_events(events: pd.DataFrame) -> None:
         raise ValueError(f"events is missing column(s): {', '.join(missing)}")
     if not events["event_id"].is_unique:
         raise ValueError("events has duplicate event_id values")
+
+
+def _check_calendar(name: str, returns: pd.Series) -> None:
+    """Raise ValueError if the series' dates are not exactly the NYSE sessions
+    between its first and last date.
+
+    Windows count rows, so one missing session or one non-session date (a
+    weekday holiday, say) shifts every window after it by a day without any
+    other error. See event_days.check_trading_days for what it cannot detect
+    (a series cut short at either end).
+    """
+    try:
+        check_trading_days(returns)
+    except ValueError as err:
+        raise ValueError(f"{name}: {err}") from None
 
 
 def _masked_days(returns: pd.Series, estimation: pd.Series, day0, gap: int) -> int:
@@ -251,6 +266,75 @@ def events_needing_later_data(
     return needing
 
 
+def estimation_dates(
+    dates: pd.DatetimeIndex,
+    events: pd.DataFrame,
+    est_length: int = DEFAULT_EST_LENGTH,
+    gap: int = DEFAULT_GAP,
+    event_windows=DEFAULT_EVENT_WINDOWS,
+) -> pd.DataFrame:
+    """Where each event's estimation window falls, with no returns involved.
+
+    `dates` is the return series' date index (the dates are all that is
+    used). It gets the same calendar check as run_events. Each event is
+    placed exactly as run_events would place it, skipping included, so
+    est_start, est_end, est_masked_days and nearby_events match a real run.
+
+    One row per event: event_id, day0, est_start, est_end, est_masked_days,
+    est_span_days, nearby_events and error. est_span_days counts the trading
+    days from est_start to est_end inclusive, skipped days included, so it is
+    est_length + est_masked_days when day -gap itself was not skipped. An
+    event that run_events would record as failed for lack of data has NaT/NaN
+    in the date columns and its message in error (missing otherwise).
+    """
+    _check_windows(event_windows)
+    _check_events(events)
+    # Zeros stand in for returns: slice_windows needs a series, but only its
+    # dates decide where the windows fall.
+    placeholder = pd.Series(0.0, index=dates)
+    _check_calendar("dates", placeholder)
+    diagnostics = overlap_diagnostics(events["day0"], event_windows)
+    skip_dates = other_event_days(events["day0"], event_windows)
+
+    rows = []
+    for event, skip, nearby in zip(
+        events.to_dict("records"), skip_dates, diagnostics["nearby_events"], strict=True
+    ):
+        row = {"event_id": event["event_id"], "day0": event["day0"]}
+        try:
+            estimation, _ = slice_windows(
+                placeholder, event["day0"], est_length, gap, event_windows, skip
+            )
+        except EventDataError as err:
+            row |= {"error": str(err)}
+        else:
+            first = dates.get_loc(estimation.index[0])
+            last = dates.get_loc(estimation.index[-1])
+            row |= {
+                "est_start": estimation.index[0],
+                "est_end": estimation.index[-1],
+                "est_masked_days": _masked_days(placeholder, estimation, event["day0"], gap),
+                "est_span_days": last - first + 1,
+            }
+        rows.append(row | {"nearby_events": nearby})
+    columns = [
+        "event_id",
+        "day0",
+        "est_start",
+        "est_end",
+        "est_masked_days",
+        "est_span_days",
+        "nearby_events",
+        "error",
+    ]
+    table = pd.DataFrame(rows, columns=columns)
+    for c in ("est_start", "est_end"):
+        table[c] = pd.to_datetime(table[c]).astype("datetime64[ns]")
+    return table.astype(
+        {"est_masked_days": "Int64", "est_span_days": "Int64", "nearby_events": "Int64"}
+    )
+
+
 def run_events(
     events: pd.DataFrame,
     security_returns: pd.Series,
@@ -278,11 +362,15 @@ def run_events(
     Failed events have no row.
 
     Raises ValueError (stopping the run) for a repeated event window, a bad
-    events table, bad parameters, a broken index, or a benchmark that is
-    flat over an estimation window (see the module docstring).
+    events table, bad parameters, a broken index, a return series whose dates
+    are not exactly the NYSE sessions between its first and last date (extra
+    non-session dates or missing sessions), or a benchmark that is flat over
+    an estimation window (see the module docstring).
     """
     _check_windows(event_windows)
     _check_events(events)
+    _check_calendar("security_returns", security_returns)
+    _check_calendar("benchmark_returns", benchmark_returns)
     diagnostics = overlap_diagnostics(events["day0"], event_windows)
     skip_dates = other_event_days(events["day0"], event_windows)
 
@@ -317,9 +405,10 @@ def run_events(
         {c: float for c in number_columns} | {"n": "Int64", "est_masked_days": "Int64"}
     )
     # to_datetime turns the dates into a date column, with NaT (missing date)
-    # for failed events, even when every event failed.
+    # for failed events, even when every event failed. astype pins the time
+    # unit, which otherwise depends on whether any event ran.
     for c in ("est_start", "est_end"):
-        numbers[c] = pd.to_datetime(numbers[c])
+        numbers[c] = pd.to_datetime(numbers[c]).astype("datetime64[ns]")
     results = pd.concat(
         [
             events[list(CARRIED_COLUMNS)].reset_index(drop=True),

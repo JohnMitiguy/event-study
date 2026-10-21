@@ -51,4 +51,6 @@ Keep it short and in plain language. The user is new to pandas and statistics; e
 3. **Minor**: clarity, tests, docs. Skip this section if there's nothing worth saying.
 4. **Needs your decision**: open choices for the user. When a choice was effectively made in code without a DECISIONS.md entry, suggest a one-line entry in the form `Decision: X. Reason: Y.` Don't add it yourself.
 
+Tag each numbered finding **Must fix** (wrong or misleading now), **Should fix** (a real risk or gap, not urgent) or **Note** (worth knowing, no action needed). Put the tag at the start of the finding, e.g. `1. **Must fix** ...`.
+
 Cite file and line for every code finding. If a section is empty, write "None found." Don't pad.

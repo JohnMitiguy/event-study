@@ -14,4 +14,6 @@ Review the most recent commit. Run `git log -5 --stat` and `git diff HEAD~1`. Al
 - Whether tests cover each behavior change: name the test file and test, or say none does.
 - Anything that could silently change a result: a CAR, a t-stat, N, or which events count as ok.
 
+Tag each numbered finding **Must fix** (wrong or misleading now), **Should fix** (a real risk or gap, not urgent) or **Note** (worth knowing, no action needed).
+
 Extra notes from the user, if any: $ARGUMENTS

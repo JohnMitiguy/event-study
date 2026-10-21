@@ -18,6 +18,7 @@ from event_study.events import load_events
 from event_study.market_model import abnormal_returns, car_test, fit_market_model
 from event_study.runner import (
     CARRIED_COLUMNS,
+    estimation_dates,
     events_needing_later_data,
     other_event_days,
     overlap_diagnostics,
@@ -142,6 +143,37 @@ def test_broken_index_stops_the_run(sim):
     with pytest.raises(ValueError, match="duplicate dates") as info:
         run_events(make_events([day0]), duplicated, benchmark)
     assert not isinstance(info.value, EventDataError)
+
+
+# --- Calendar check: the dates must be exactly the NYSE sessions --------------
+
+
+def test_missing_session_raises(sim):
+    security, benchmark, day0 = sim
+    # Dropping a row from the middle would shift every later window by a day.
+    short = security.drop(security.index[100])
+    with pytest.raises(ValueError, match=r"(?s)security_returns.*Missing sessions \(1\)") as info:
+        run_events(make_events([day0]), short, benchmark)
+    assert not isinstance(info.value, EventDataError)
+
+
+def test_non_session_date_raises(sim):
+    security, benchmark, day0 = sim
+    # 2024-07-04 is a weekday and an NYSE holiday. Replace the row after it
+    # with the holiday so the row count stays the same.
+    dates = benchmark.index.to_list()
+    row = dates.index(pd.Timestamp("2024-07-05"))
+    dates[row] = pd.Timestamp("2024-07-04")
+    holiday = benchmark.set_axis(pd.DatetimeIndex(dates))
+    with pytest.raises(ValueError, match=r"(?s)benchmark_returns.*Non-session dates \(1\)"):
+        run_events(make_events([day0]), security, holiday)
+
+
+def test_calendar_check_message_names_the_dates(sim):
+    security, benchmark, day0 = sim
+    short = benchmark.drop(benchmark.index[100])
+    with pytest.raises(ValueError, match=str(benchmark.index[100].date())):
+        run_events(make_events([day0]), security, short)
 
 
 def test_carried_columns_keep_values_and_types(sim):
@@ -393,6 +425,46 @@ def test_events_needing_later_data_counts_sessions_not_calendar_days():
     assert events_needing_later_data(events, pd.Timestamp("2024-07-03"), ((0, 1),)) == [
         "test_event_0"
     ]
+
+
+# --- estimation_dates: the windows without any returns -------------------------
+
+
+def test_estimation_dates_match_a_real_run(sim):
+    security, benchmark, _ = sim
+    # Row 150 skips row 50's 11 days (event 50 itself fails: too little
+    # history). Row 160's estimation window ends at row 150, where row 150's
+    # own days 145..150 begin, so it skips those 6 plus row 50's 11.
+    events = make_events([security.index[p] for p in (150, 160, 50)])
+    results, _ = run_events(events, security, benchmark)
+    table = estimation_dates(security.index, events)
+
+    for column in ("est_start", "est_end", "est_masked_days", "nearby_events"):
+        pd.testing.assert_series_equal(table[column], results[column], check_names=False)
+    assert table["est_masked_days"].tolist()[:2] == [11, 17]
+    assert table["error"].isna().tolist() == [True, True, False]
+    assert table.loc[2, "error"] == results.loc[2, "error"]
+    assert table.loc[2, ["est_start", "est_end", "est_masked_days", "est_span_days"]].isna().all()
+
+
+def test_estimation_span_counts_trading_days_from_start_to_end(sim):
+    security, _, _ = sim
+    events = make_events([security.index[150], security.index[175]])
+    table = estimation_dates(security.index, events, est_length=60, gap=6)
+    # No skipped days: the span is est_length. Skipped days add to it.
+    assert table["est_span_days"].tolist() == [60, 60 + 11]
+    first = security.index.get_loc(table.loc[1, "est_start"])
+    last = security.index.get_loc(table.loc[1, "est_end"])
+    assert last - first + 1 == 71
+
+
+def test_estimation_dates_need_only_dates_and_check_the_calendar(sim):
+    security, _, day0 = sim
+    events = make_events([day0])
+    # A date index is enough: no returns are passed in.
+    assert pd.isna(estimation_dates(security.index, events).loc[0, "error"])
+    with pytest.raises(ValueError, match=r"(?s)dates.*Missing sessions \(1\)"):
+        estimation_dates(security.index.delete(100), events)
 
 
 # --- End to end ---------------------------------------------------------------
