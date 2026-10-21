@@ -168,3 +168,53 @@ def test_index_problems_are_plain_value_errors(returns, make_bad):
     with pytest.raises(ValueError) as info:
         slice_windows(make_bad(returns), "2024-01-16", est_length=3, gap=2)
     assert not isinstance(info.value, EventDataError)
+
+
+# --- Skipped days --------------------------------------------------------------
+# Day 0 = Jan 16 (position 10), est_length=3, gap=2: without skips the
+# estimation window is positions 6..8 (Jan 10, 11, 12).
+
+
+def skip_call(returns, skip_dates, day0="2024-01-16"):
+    return slice_windows(
+        returns, day0, est_length=3, gap=2, event_windows=((-1, 1),), skip_dates=skip_dates
+    )
+
+
+def test_skipped_day_is_left_out_and_window_reaches_back(returns):
+    est, _ = skip_call(returns, ["2024-01-11"])
+    assert est.index.tolist() == [pd.Timestamp(d) for d in ("2024-01-09", "2024-01-10", "2024-01-12")]
+    # Same values as rows 5, 6 and 8 of the input.
+    pd.testing.assert_series_equal(est, returns.iloc[[5, 6, 8]])
+
+
+def test_skipped_day_minus_gap_ends_the_window_earlier(returns):
+    # Jan 12 is day -2, where the window normally ends.
+    est, _ = skip_call(returns, ["2024-01-12"])
+    assert first_last(est) == (pd.Timestamp("2024-01-09"), pd.Timestamp("2024-01-11"))
+    assert len(est) == 3
+
+
+def test_skip_dates_outside_the_estimation_window_change_nothing(returns):
+    plain_est, plain_events = skip_call(returns, [])
+    # A Saturday, the three event-window days and a date before the data.
+    outside = ["2024-01-13", "2024-01-15", "2024-01-16", "2024-01-17", "2023-12-29"]
+    est, events = skip_call(returns, outside)
+    pd.testing.assert_series_equal(est, plain_est)
+    pd.testing.assert_series_equal(events[(-1, 1)], plain_events[(-1, 1)])
+
+
+def test_skipping_past_the_first_row_raises(returns):
+    # Day 0 = Jan 08 (position 4): the window is exactly rows 0..2. Skipping
+    # Jan 03 (row 1) leaves only 2 rows.
+    est, _ = skip_call(returns, [], day0="2024-01-08")
+    assert len(est) == 3
+    with pytest.raises(EventDataError, match="needs 1 more row.*1 day\\(s\\) were skipped"):
+        skip_call(returns, ["2024-01-03"], day0="2024-01-08")
+
+
+def test_tz_aware_skip_dates_are_a_plain_value_error(returns):
+    aware = pd.DatetimeIndex(["2024-01-11"]).tz_localize("America/New_York")
+    with pytest.raises(ValueError, match="skip_dates must be tz-naive") as info:
+        skip_call(returns, aware)
+    assert not isinstance(info.value, EventDataError)

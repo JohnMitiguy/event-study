@@ -37,15 +37,17 @@ PLANTED_JUMP = 0.04
 NULL_MASTER_SEED = 2026
 
 
-def fake_returns(rng: np.random.Generator) -> tuple[pd.Series, pd.Series]:
-    """(security, benchmark) daily returns for N_DAYS business days.
+def fake_returns(
+    rng: np.random.Generator, n_days: int = N_DAYS
+) -> tuple[pd.Series, pd.Series]:
+    """(security, benchmark) daily returns for n_days business days.
 
     Draws all benchmark returns first, then all noise, from rng. With the
     same seed you get the same numbers every time.
     """
-    dates = pd.bdate_range(FIRST_DATE, periods=N_DAYS)
-    benchmark = rng.normal(0.0, BENCHMARK_STD, N_DAYS)
-    noise = rng.normal(0.0, NOISE_STD, N_DAYS)
+    dates = pd.bdate_range(FIRST_DATE, periods=n_days)
+    benchmark = rng.normal(0.0, BENCHMARK_STD, n_days)
+    noise = rng.normal(0.0, NOISE_STD, n_days)
     security = TRUE_ALPHA + TRUE_BETA * benchmark + noise
     return (
         pd.Series(security, index=dates, name="security"),

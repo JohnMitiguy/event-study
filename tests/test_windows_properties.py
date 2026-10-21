@@ -3,7 +3,9 @@
 hypothesis draws random valid settings (est_length, gap, event windows), a
 random series just long enough for them (plus a few spare rows), and checks
 that the windows land in the right rows. Then it breaks the settings or the
-data in random ways and checks that slice_windows always raises.
+data in random ways and checks that slice_windows always raises. The last
+section adds random skip_dates and checks which rows the estimation window
+keeps.
 
 The series dates are Monday-Friday business days (pd.bdate_range).
 slice_windows counts rows, not calendar sessions, so holidays don't matter
@@ -203,4 +205,96 @@ def test_non_integer_settings_raise(setup, name, value):
     else:
         setup[name] = value
     with pytest.raises((TypeError, ValueError)):
+        call(setup)
+
+
+# --- Skipped days -------------------------------------------------------------
+
+
+@st.composite
+def setup_with_skips(draw) -> dict:
+    """Like valid_setup, plus skip_dates.
+
+    k rows at or before day -gap are skipped, and the series gets k more rows
+    before day 0 so the estimation window still fits. skip_dates also holds
+    dates that should change nothing: rows after day -gap (the gap and the
+    event windows) and dates that are not in the series.
+    """
+    est_length = draw(st.integers(min_value=1, max_value=MAX_EST_LENGTH))
+    gap = draw(st.integers(min_value=1, max_value=MAX_GAP))
+    windows = tuple(draw(st.lists(event_window(gap), min_size=1, max_size=3)))
+    k = draw(st.integers(min_value=0, max_value=20))
+
+    rows_before = max(gap + est_length - 1 + k, -min(start for start, _ in windows))
+    rows_after = max(0, max(end for _, end in windows))
+    p = rows_before + draw(st.integers(min_value=0, max_value=5))
+    n = p + rows_after + 1 + draw(st.integers(min_value=0, max_value=5))
+    seed = draw(st.integers(min_value=0, max_value=2**32 - 1))
+    values = np.random.default_rng(seed).normal(0.0, 0.01, n)
+    returns = pd.Series(values, index=pd.bdate_range("2020-01-01", periods=n))
+
+    # unique=True: k different rows, all at or before day -gap.
+    skipped_rows = draw(st.lists(st.integers(0, p - gap), min_size=k, max_size=k, unique=True))
+    harmless_rows = draw(st.lists(st.integers(p - gap + 1, n - 1), max_size=5))
+    # 2020-01-04 is a Saturday, and 2019-12-27 is before the series.
+    not_in_series = [pd.Timestamp("2020-01-04"), pd.Timestamp("2019-12-27")]
+    skip_dates = [*returns.index[skipped_rows], *returns.index[harmless_rows], *not_in_series]
+    return {
+        "returns": returns,
+        "day0": returns.index[p],
+        "est_length": est_length,
+        "gap": gap,
+        "event_windows": windows,
+        "skip_dates": pd.DatetimeIndex(skip_dates),
+        "p": p,
+    }
+
+
+def expected_estimation_rows(setup: dict) -> list[int]:
+    """The est_length latest rows at or before day -gap that are not skipped.
+
+    Found the slow, obvious way: step back one row at a time from day -gap.
+    The strategy always leaves enough rows, so this never runs past row 0.
+    """
+    returns, skip = setup["returns"], setup["skip_dates"]
+    rows = []
+    row = setup["p"] - setup["gap"]
+    while len(rows) < setup["est_length"]:
+        if returns.index[row] not in skip:
+            rows.append(row)
+        row -= 1
+    return rows[::-1]  # back into date order
+
+
+@given(setup_with_skips())
+def test_estimation_window_is_the_latest_unskipped_rows(setup):
+    estimation, _ = call(setup)
+    expected = setup["returns"].iloc[expected_estimation_rows(setup)]
+    pd.testing.assert_series_equal(estimation, expected)
+
+
+@given(setup_with_skips())
+def test_no_estimation_day_is_skipped_or_after_day_minus_gap(setup):
+    estimation, _ = call(setup)
+    returns, p, gap = setup["returns"], setup["p"], setup["gap"]
+    assert len(estimation) == setup["est_length"]
+    assert not estimation.index.isin(setup["skip_dates"]).any()
+    assert estimation.index[-1] <= returns.index[p - gap]
+
+
+@given(setup_with_skips())
+def test_skip_dates_never_change_event_windows(setup):
+    _, with_skips = call(setup)
+    _, without = call(setup | {"skip_dates": ()})
+    assert with_skips.keys() == without.keys()
+    for window, expected in without.items():
+        pd.testing.assert_series_equal(with_skips[window], expected)
+
+
+@given(setup_with_skips())
+def test_one_unskipped_row_short_raises(setup):
+    """Cut the series just after the first row the window uses: one row short."""
+    first_used = expected_estimation_rows(setup)[0]
+    setup["returns"] = setup["returns"].iloc[first_used + 1 :]
+    with pytest.raises(EventDataError, match="needs 1 more row"):
         call(setup)

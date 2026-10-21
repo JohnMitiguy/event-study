@@ -168,11 +168,14 @@ def test_identical_cars_raise():
 
 
 def test_on_run_events_output():
-    # Seven events on one simulated series. Rows 130..190 leave room for the
-    # estimation window (129 rows before) and the [-5,+5] window (5 rows
-    # after, of 200). Row 100 has too little history, so it fails.
-    security, benchmark = fake_returns(np.random.default_rng(3))
-    positions = [130, 140, 150, 160, 170, 180, 190, 100]
+    # Seven events on one simulated series of 300 rows, 20 rows apart. Each
+    # estimation window skips the earlier events' [-5,+5] days and reaches
+    # back further: e150 skips e100's 11 days and starts at row 10, and e270
+    # skips all seven earlier windows (77 days). Row 100 has too little
+    # history (it needs 129 rows before it), so it fails, but its days are
+    # still skipped by the others.
+    security, benchmark = fake_returns(np.random.default_rng(3), n_days=300)
+    positions = [150, 170, 190, 210, 230, 250, 270, 100]
     events = pd.DataFrame(
         {
             "event_id": [f"e{p}" for p in positions],

@@ -14,11 +14,11 @@ Decision: Results come from a frozen price snapshot refreshed only with --refres
 
 Decision: Estimation length, gap and event windows are configurable parameters, not hardcoded. Reason: the 120-day and 10-day choices are defaults we may revisit, and robustness checks need to vary them without rewriting code.
 
-Decision: The estimation window is 120 trading days ending at day -10 (days -129 through -10), and the event windows are [-1,+1] and [-5,+5], all counted by trading-day position. Reason: the gap keeps pre-event run-up and leaked news out of the model, and counting positions avoids calendar-day errors around weekends and holidays.
+Decision: The estimation window is 120 trading days up to day -10 (days -129 through -10 when no other event's window falls in it; see the skipping rule), and the event windows are [-1,+1] and [-5,+5], all counted by trading-day position. Reason: the gap keeps pre-event run-up and leaked news out of the model, and counting positions avoids calendar-day errors around weekends and holidays.
 
 Decision: The estimation window must end before day 0 and before the start of every event window, so the gap is at least 1. Reason: otherwise a post-event window with a small gap would fit the model on the event's own reaction.
 
-Decision: Window slicing raises when day 0 is missing or a window runs off the data, the parameter checks raise when windows collide, and NaN or infinite returns raise in the market model; windows are never shrunk or shifted. Missing trading days are caught by the calendar check in run_opec.py before slicing, because slicing counts rows. Reason: a silently truncated 60-day estimation window would look like a 120-day regression and quietly weaken every result.
+Decision: Window slicing raises when day 0 is missing or a window runs off the data (including an estimation window that reaches back past the first row after skipping other events' days), the parameter checks raise when windows collide, and NaN or infinite returns raise in the market model; windows are never shrunk, and the estimation window moves back only to replace skipped days, with est_start, est_end and est_masked_days reported. Reason: a silently truncated 60-day estimation window would look like a 120-day regression and quietly weaken every result.
 
 Decision: The returns series is validated against the NYSE calendar before any event is run through the windows. Reason: a single dropped trading day silently shifts every window after it by one row.
 
@@ -36,7 +36,7 @@ Decision: An event with a leak known only by date uses the official announcement
 
 Decision: The events CSV has a confound_note column, and the file lives in a tracked events/ folder, not the gitignored data/ folder. Reason: market-wide confounds need to be recorded when each event is entered, and the hand-built event list is part of the project, not downloaded data.
 
-Decision: Main results keep all data; a robustness run drops events whose estimation window contains any of the five largest absolute market-model residual days (XLE return minus beta times SPY return). Reason: extreme residual days inflate residual variance and distort beta, ranking by residual removes market-wide days that beta already handles, and fixing the rule before seeing results avoids data snooping.
+Decision: Main results drop no events for outliers; a robustness run drops events whose estimation days (the days actually fitted, not the span from est_start to est_end) contain any of the five largest absolute market-model residual days (XLE return minus beta times SPY return), filtering the results of the full run rather than the events table. Reason: extreme residual days inflate residual variance and distort beta, ranking by residual removes market-wide days that beta already handles, and fixing the rule before seeing results avoids data snooping.
 
 Decision: The market model is an OLS regression of security returns on benchmark returns with an intercept, using the estimation window only, with residual variance computed on n-2 degrees of freedom. Reason: it is the standard specification, and the n-2 divisor reflects the two estimated parameters.
 
@@ -58,11 +58,13 @@ Decision: A benchmark with no variance in an estimation window stops the run, wh
 
 Decision: run_opec.py stops, instead of logging failed events, if the trading-day check fails or an event needs prices after the cached data ends (rerun with --refresh). Reason: misaligned or missing data would give wrong numbers without any error.
 
-Decision: The runner reports overlap diagnostics per event and applies no exclusions, and the treatment of overlapping estimation windows is decided after the pilot, before the full sample is run. Reason: with a handful of events overlap is rare, and seeing the diagnostics on the real list is better than guessing a rule.
+Decision: The runner drops no events for overlap: estimation-window overlap is handled by the skipping rule, and nearby_events (events whose widest windows share a day) is reported. Reason: dropping overlapping events would shrink a small sample, and the diagnostic shows where CARs measure the same days.
 
 Decision: confound_note records only specific, dated, sourced items inside [-1,+1] that plausibly hit energy differently from the broad market; market backdrop is left out and flagged events stay in the main run. Reason: the market model already removes market-wide moves, and excluding on judgment calls invites cherry-picking.
 
 Decision: A pause or delay of scheduled increases is tagged hold, even when the same release includes a small pre-announced increase. Reason: tagging it increase would pool a supply-tightening surprise with real loosening events and wash out the cut and increase tests.
+
+Decision: Failed events still mask other events' estimation windows; if day -10 is masked the window ends on the latest unmasked day before it; there is no cap on how far back the window reaches yet; only earlier events mask later ones. Reason: the market reacted whether or not an event's own regression ran, a cap will be chosen from event dates before any CARs are read, and a later event cannot be known when an earlier one is estimated.
 
 ## Not built yet
 - Official-time robustness run (the --official-time flag exists, but the run has not been done)

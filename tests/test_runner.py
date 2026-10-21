@@ -19,6 +19,7 @@ from event_study.market_model import abnormal_returns, car_test, fit_market_mode
 from event_study.runner import (
     CARRIED_COLUMNS,
     events_needing_later_data,
+    other_event_days,
     overlap_diagnostics,
     result_columns,
     run_events,
@@ -27,7 +28,6 @@ from event_study.simulate import DAY0_POSITION, planted_event
 from event_study.windows import (
     DEFAULT_EST_LENGTH,
     DEFAULT_EVENT_WINDOWS,
-    DEFAULT_GAP,
     slice_windows,
 )
 
@@ -66,6 +66,10 @@ def test_matches_direct_pipeline(sim):
     assert row["beta"] == pytest.approx(fit.beta)
     assert row["resid_std"] == pytest.approx(fit.resid_std)
     assert row["n"] == DEFAULT_EST_LENGTH
+    # One event alone has nothing to skip: the plain 120-day window.
+    assert row["est_start"] == sec_est.index[0]
+    assert row["est_end"] == sec_est.index[-1]
+    assert row["est_masked_days"] == 0
     for window, label in (((-1, 1), "[-1,+1]"), ((-5, 5), "[-5,+5]")):
         direct = car_test(fit, sec_events[window], bench_events[window])
         assert row[f"car_{label}"] == pytest.approx(direct.car)
@@ -189,18 +193,16 @@ def test_duplicate_event_id_raises(sim):
         run_events(events, security, benchmark)
 
 
-# --- Overlap diagnostics ------------------------------------------------------
+# --- Overlap: nearby events and skipped estimation days -----------------------
 
-# Real NYSE sessions, since the diagnostics count session positions.
-# SESSIONS[k] is k sessions after 2023-01-03.
+# Real NYSE sessions, since skipped days and nearby_events count session
+# positions. SESSIONS[k] is k sessions after 2023-01-03.
 SESSIONS = nyse_calendar().sessions_in_range("2023-01-03", "2025-12-31")
 
 
 def diagnostics(day0s):
-    """Diagnostics with the default estimation length, gap and windows."""
-    return overlap_diagnostics(
-        pd.Series(day0s), DEFAULT_EST_LENGTH, DEFAULT_GAP, DEFAULT_EVENT_WINDOWS
-    )
+    """nearby_events with the default event windows."""
+    return overlap_diagnostics(pd.Series(day0s), DEFAULT_EVENT_WINDOWS)
 
 
 def diagnostics_for(positions):
@@ -208,24 +210,16 @@ def diagnostics_for(positions):
     return diagnostics([SESSIONS[p] for p in positions])
 
 
-def test_overlap_counts():
-    # Widest window is days -5..+5; estimation window is days -129..-10.
-    # A at 150: widest 145..155, estimation 21..140.
-    # B at 130: widest 125..135, estimation 1..120.
-    # C at 158: widest 153..163, estimation 29..148.
+def test_nearby_counts():
+    # Widest window is days -5..+5. A at 150: 145..155. B at 130: 125..135.
+    # C at 158: 153..163. A and C share 153..155; B shares nothing.
     diag = diagnostics_for([150, 130, 158])
-    # A's estimation window holds all 11 of B's days; A and C share 153..155.
-    assert diag.loc[0].tolist() == [11, 1]
-    # B's estimation window ends at 120, before A and C begin.
-    assert diag.loc[1].tolist() == [0, 0]
-    # C's estimation window holds B's 11 days plus A's 145..148.
-    assert diag.loc[2].tolist() == [15, 1]
+    assert diag["nearby_events"].tolist() == [1, 0, 1]
 
 
 def test_same_day_events_are_nearby():
     diag = diagnostics_for([150, 150])
     assert diag["nearby_events"].tolist() == [1, 1]
-    assert diag["est_overlap_days"].tolist() == [0, 0]
 
 
 def test_event_after_the_data_end_still_counts():
@@ -237,20 +231,20 @@ def test_event_after_the_data_end_still_counts():
     assert b not in data
     diag = diagnostics([a, b])
     assert diag["nearby_events"].tolist() == [1, 1]
-    # A's estimation window ends at 187, B's at 191: neither reaches 192.
-    assert diag["est_overlap_days"].tolist() == [0, 0]
 
 
 def test_event_before_the_data_start_still_counts():
     # Data starts at SESSIONS[10]. B's day 0 is SESSIONS[9], one session
-    # before the first row: widest window 4..14. A is data row 129
-    # (SESSIONS[139]): estimation window 10..129, which holds B's 10..14.
+    # before the first row: widest window 4..14, of which 10..14 are in the
+    # data. A is SESSIONS[139]: widest window 134..144.
     data = SESSIONS[10:310]
     a, b = data[129], SESSIONS[9]
     assert b not in data
-    diag = diagnostics([a, b])
-    assert diag.loc[0].tolist() == [5, 0]
-    assert diag.loc[1].tolist() == [0, 0]
+    skip_a, skip_b = other_event_days(pd.Series([a, b]), DEFAULT_EVENT_WINDOWS)
+    # A skips all of B's days, inside the data or not.
+    assert skip_a.equals(SESSIONS[4:15])
+    assert skip_b.equals(SESSIONS[134:145])
+    assert diagnostics([a, b])["nearby_events"].tolist() == [0, 0]
 
 
 def test_non_session_day0_raises():
@@ -263,7 +257,119 @@ def test_overlap_columns_in_results(sim):
     events = make_events([day0, security.index[DAY0_POSITION + 3]])
     results, _ = run_events(events, security, benchmark)
     assert results["nearby_events"].tolist() == [1, 1]
-    assert results["est_overlap_days"].dtype == "Int64"
+    assert results["est_masked_days"].dtype == "Int64"
+    # kind "M" means a datetime64 (date) column.
+    assert results["est_start"].dtype.kind == "M"
+    assert results["est_end"].dtype.kind == "M"
+
+
+def session_returns(n: int = 300) -> tuple[pd.Series, pd.Series]:
+    """Clean (security, benchmark) returns on SESSIONS[0..n-1].
+
+    Data row k is SESSIONS[k], so row numbers and session positions agree.
+    """
+    dates = SESSIONS[:n]
+    rng = np.random.default_rng(11)
+    benchmark = rng.normal(0.0, 0.01, n)
+    security = 1.2 * benchmark + rng.normal(0.0, 0.01, n)
+    return pd.Series(security, index=dates), pd.Series(benchmark, index=dates)
+
+
+def run_at(positions, event_windows=DEFAULT_EVENT_WINDOWS) -> pd.DataFrame:
+    """Results for events at these SESSIONS positions, indexed by id "e<position>"."""
+    security, benchmark = session_returns()
+    events = make_events([SESSIONS[p] for p in positions], ids=[f"e{p}" for p in positions])
+    results, _ = run_events(events, security, benchmark, event_windows=event_windows)
+    return results.set_index("event_id")
+
+
+def est_rows(row) -> tuple:
+    """(first row, last row, masked days) of one event's estimation window."""
+    return (
+        SESSIONS.get_loc(row["est_start"]),
+        SESSIONS.get_loc(row["est_end"]),
+        row["est_masked_days"],
+    )
+
+
+def test_estimation_skips_other_events_days():
+    # Defaults: widest window -5..+5, 120 estimation days up to day -10.
+    # B at 130: rows up to 120, nothing to skip: rows 1..120.
+    # A at 150: rows up to 140, skipping B's 125..135 (11 days), so it
+    #   reaches 11 rows further back: 10..140.
+    # C at 158: rows up to 148, but A's window covers 145..148, so it ends
+    #   on 144; with B's 125..135 that is 15 days skipped: 14..144.
+    results = run_at([150, 130, 158])
+    assert est_rows(results.loc["e130"]) == (1, 120, 0)
+    assert est_rows(results.loc["e150"]) == (10, 140, 11)
+    assert est_rows(results.loc["e158"]) == (14, 144, 15)
+    assert (results["n"] == DEFAULT_EST_LENGTH).all()
+    assert (results["status"] == "ok").all()
+
+
+def test_fit_uses_exactly_the_unskipped_days():
+    # A at 150 with B at 130: refit by hand on rows 10..140 without 125..135.
+    security, benchmark = session_returns()
+    results = run_at([150, 130])
+    used = SESSIONS[[*range(10, 125), *range(136, 141)]]
+    fit = fit_market_model(security.loc[used], benchmark.loc[used], min_obs=DEFAULT_EST_LENGTH)
+    row = results.loc["e150"]
+    assert row["alpha"] == pytest.approx(fit.alpha)
+    assert row["beta"] == pytest.approx(fit.beta)
+    assert row["resid_std"] == pytest.approx(fit.resid_std)
+
+
+def test_skipped_day_minus_gap_ends_the_window_earlier():
+    # B at 145: widest window 140..150 covers A's day -10 (row 140), so A's
+    # window ends on row 139 instead and runs 20..139. B's own window (rows
+    # 16..135) has nothing to skip.
+    results = run_at([150, 145])
+    assert est_rows(results.loc["e150"]) == (20, 139, 1)
+    assert est_rows(results.loc["e145"]) == (16, 135, 0)
+
+
+def test_skipped_days_come_from_the_widest_configured_window():
+    # B at 120. With windows (-1, +1) and (0, +3) the widest is -1..+3, so A
+    # skips B's 119..123 (5 days); with the defaults, 115..125 (11 days).
+    narrow = run_at([150, 120], event_windows=((-1, 1), (0, 3)))
+    assert est_rows(narrow.loc["e150"]) == (16, 140, 5)
+    assert est_rows(run_at([150, 120]).loc["e150"]) == (10, 140, 11)
+
+
+def test_failed_event_still_masks():
+    # B at 120 fails: its window would start at row 120 - 129 = -9. Its
+    # reaction still happened, so A still skips its days.
+    results = run_at([150, 120])
+    assert results.loc["e120", "status"] == "failed"
+    assert est_rows(results.loc["e150"]) == (10, 140, 11)
+
+
+def test_reaching_back_past_the_first_row_fails_the_event():
+    # A at 135 alone: rows 6..125. With B at 120 it skips B's 115..125
+    # (11 days) and would have to start at row -5: 5 rows short.
+    assert run_at([135]).loc["e135", "status"] == "ok"
+    row = run_at([135, 120]).loc["e135"]
+    assert row["status"] == "failed"
+    assert "estimation window needs 5 more row(s)" in row["error"]
+    assert "11 day(s) were skipped as inside other events' windows" in row["error"]
+    assert pd.isna(row["est_start"])
+    assert pd.isna(row["est_end"])
+    assert pd.isna(row["est_masked_days"])
+
+
+@pytest.mark.parametrize("earlier", [[], [130]], ids=["alone", "with_earlier_event"])
+def test_later_event_never_changes_an_earlier_events_row(earlier):
+    """A at 150, run with and without C at 158, a later event whose widest
+    window (153..163) overlaps A's own (145..155).
+
+    Only nearby_events may differ: it counts neighbours on both sides on
+    purpose. With an earlier B at 130, A skips B's 11 days in both runs.
+    """
+    without = run_at([*earlier, 150]).drop(columns="nearby_events")
+    with_later = run_at([*earlier, 150, 158]).drop(columns="nearby_events")
+    # loc[["e150"]] (a list) keeps a one-row table, so each column keeps its type.
+    pd.testing.assert_frame_equal(with_later.loc[["e150"]], without.loc[["e150"]], check_exact=True)
+    assert without.loc["e150", "est_masked_days"] == 11 * len(earlier)
 
 
 # --- Data coverage ------------------------------------------------------------

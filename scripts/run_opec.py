@@ -33,6 +33,7 @@ import hashlib
 import json
 import math
 import subprocess
+import textwrap
 from datetime import datetime
 from pathlib import Path
 
@@ -59,6 +60,7 @@ from event_study.runner import (
     events_needing_later_data,
     run_events,
     stat_column,
+    widest_window,
 )
 from event_study.windows import (
     DEFAULT_EST_LENGTH,
@@ -74,6 +76,13 @@ EVENTS_PATH = Path("events") / "opec_events.csv"
 # Event days drawn in each panel. Must lie inside the widest event window.
 CHART_DAYS = range(-5, 6)
 PANEL_COLUMNS = 4
+
+# Caption text size, and roughly how many characters of it fit in one inch
+# (set a little low so a line never runs off the edge). One caption line
+# takes about 1.3 times the font size in height; 72 points make an inch.
+CAPTION_FONTSIZE = 7
+CAPTION_CHARS_PER_INCH = 16
+CAPTION_LINE_HEIGHT_IN = 1.3 * CAPTION_FONTSIZE / 72
 
 # Colors from the same palette as plot_prices.py.
 DAY0 = "#2a78d6"
@@ -248,12 +257,22 @@ def print_summary(results: pd.DataFrame) -> None:
     header = f"{'event_id':<24} {'day 0':<10}"
     for window in DEFAULT_EVENT_WINDOWS:
         header += f" {'CAR ' + window_label(window):>14} {'t':>6}"
-    print("\n" + header + f" {'est overlap':>11} {'nearby':>6}")
+    print("\n" + header + f" {'masked':>6} {'nearby':>6}")
     for _, row in ran.iterrows():
         line = f"{row['event_id']:<24} {row['day0'].date()!s:<10}"
         for window in DEFAULT_EVENT_WINDOWS:
             line += f" {row[car_column(window)]:>+14.2%} {row[stat_column(window)]:>6.2f}"
-        print(line + f" {row['est_overlap_days']:>11} {row['nearby_events']:>6}")
+        print(line + f" {row['est_masked_days']:>6} {row['nearby_events']:>6}")
+
+
+def wrap_caption(text: str, fig_width: float) -> str:
+    """Break text into lines that fit across a figure fig_width inches wide.
+
+    The width is estimated from CAPTION_CHARS_PER_INCH, leaving the 1% margin
+    on each side that the caption is drawn with.
+    """
+    width = int(0.98 * fig_width * CAPTION_CHARS_PER_INCH)
+    return textwrap.fill(text, width=width)
 
 
 def draw_panel(ax, event_id: str, day0: pd.Timestamp, abnormal: pd.Series) -> None:
@@ -303,15 +322,25 @@ def draw_chart(
         f"{CHART_DAYS[0]} to +{CHART_DAYS[-1]} (day 0 highlighted)",
         fontsize=11,
     )
+    widest = window_label(widest_window(DEFAULT_EVENT_WINDOWS))
+    # " " is a non-breaking space, so wrapping never splits "day -10".
     caption = (
-        f"Market model fitted on {DEFAULT_EST_LENGTH} trading days ending on day "
-        f"-{DEFAULT_GAP}. Source: Yahoo Finance adjusted close (yfinance), data through "
-        f"{data_end.date()}. Failed events are not shown; see {results_path.as_posix()}."
+        f"Market model fitted on {DEFAULT_EST_LENGTH} trading days up to day "
+        f"-{DEFAULT_GAP}, skipping days inside other events' {widest} windows and reaching "
+        "further back to make up for them. Source: Yahoo Finance adjusted close (yfinance), "
+        f"data through {data_end.date()}. Failed events are not shown; see "
+        f"{results_path.as_posix()}."
     )
-    fig.text(0.01, 0.01, caption, fontsize=7, color=TEXT_SECONDARY)
+    fig_width, fig_height = fig.get_size_inches()
+    caption = wrap_caption(caption, fig_width)
+    # va="bottom": the caption's last line sits on y = 0.01 and extra lines go up.
+    fig.text(0.01, 0.01, caption, fontsize=CAPTION_FONTSIZE, color=TEXT_SECONDARY, va="bottom")
 
     chart_path.parent.mkdir(parents=True, exist_ok=True)
-    fig.tight_layout(rect=(0, 0.04, 1, 1))  # leave room at the bottom for the caption
+    # Leave room at the bottom for the caption's lines, plus a little padding.
+    n_lines = caption.count("\n") + 1
+    bottom = (n_lines * CAPTION_LINE_HEIGHT_IN + 0.15) / fig_height
+    fig.tight_layout(rect=(0, bottom, 1, 1))
     fig.savefig(chart_path, dpi=150)
     print(f"Saved {chart_path}")
 
