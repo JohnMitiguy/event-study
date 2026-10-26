@@ -102,6 +102,8 @@ Decision: saudi_unilateral rows are kept out of the all/cut/hold/increase groups
 
 Decision: The outlier run ranks days by XLE return minus one full-sample beta (2010 to 2026) times SPY return. Reason: a single beta gives one fixed list of extreme days for every event, picked before any CAR was read.
 
+Decision: An event whose day 0 is pinned by a timed news report before the open on the decision day is entered as date-only with that report's time, not time_assumed. Reason: every plausible announcement time then gives the same day 0, which is the existing date-only rule.
+
 ## Not built yet
 - Official-time robustness run (the --official-time flag exists, but the run has not been done)
 - Saudi unilateral subsample report

@@ -39,11 +39,11 @@
   "use_leak": false,
   "shift_assumed": false,
   "events_file": "events/opec_events.csv",
-  "events_file_sha256": "e3e887c1427cb268f73ebdb42b44f7036b5a1fbe41a66c367aceda49ee434d12",
+  "events_file_sha256": "71b8ade24cffa973fc59d2cfb6be5d8f44cc20b5896729509e866a1c96daec9a",
   "mask_file": "events/opec_mask_only.csv",
   "mask_file_sha256": "28e62bf9d2bb8c729a5936460c26e245420c701610d5bc47f4c1a46345d55271",
   "yfinance_version": "1.7.0",
   "pandas_version": "3.0.6",
-  "git_commit": "601387979ceb5ffa889b2184d59183d393facac7",
+  "git_commit": "9a54674fc15b01427b635032e71616aa289e0f2a",
   "git_dirty": true
 }
