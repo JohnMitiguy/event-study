@@ -12,10 +12,11 @@ import numpy as np
 import pandas as pd
 
 # pytest puts the tests/ folder on the import path (see test_runner.py).
-from test_events import valid_row, write_events
+from test_events import mask_row, valid_row, write_events
 
 from event_study.aggregate import across_event_tests
 from event_study.event_days import nyse_calendar
+from event_study.events import MASK_COLUMNS
 
 SCRIPT = Path(__file__).parents[1] / "scripts" / "run_opec.py"
 
@@ -64,6 +65,11 @@ def test_dates_only_prints_windows_and_computes_nothing(tmp_path, monkeypatch, c
         valid_row(event_id="b", announcement_datetime_et=f"{day_b.date()} 10:00"),
     ]
     monkeypatch.setattr(run_opec, "EVENTS_PATH", write_events(tmp_path, rows))
+    # One mask-only event at row 200, inside both estimation windows.
+    mask_dir = tmp_path / "masks"
+    mask_dir.mkdir()
+    mask = mask_row(announcement_datetime_et=f"{sessions[200].date()} 10:00")
+    monkeypatch.setattr(run_opec, "MASK_PATH", write_events(mask_dir, [mask], MASK_COLUMNS))
 
     def must_not_run(*args, **kwargs):
         raise AssertionError("dates-only must not compute returns or run the model")
@@ -76,11 +82,14 @@ def test_dates_only_prints_windows_and_computes_nothing(tmp_path, monkeypatch, c
     out = capsys.readouterr().out
     assert "no returns, regressions or CARs computed" in out
     lines = {line.split()[0]: line.split() for line in out.splitlines() if line[:2] in ("a ", "b ")}
-    # Row 330's estimation window (ends at row 320) skips row 300's 11 days:
-    # masked 11, span 120 + 11. The windows themselves do not touch: nearby 0.
+    # Row 300's estimation window skips the mask's 11 days (195..205): masked
+    # 11, span 120 + 11. Row 330's (ends at row 320) skips row 300's 11 days
+    # and the mask's: masked 22, span 142. No window touches another event's
+    # or the mask's: nearby 0, n_mask 0.
+    assert "Mask-only events (1;" in out
     assert lines["a"][1] == str(day_a.date())
-    assert lines["a"][4:] == ["0", "120", "0"]
-    assert lines["b"][4:] == ["11", "131", "0"]
+    assert lines["a"][4:] == ["11", "131", "0", "0"]
+    assert lines["b"][4:] == ["22", "142", "0", "0"]
     # est_end is day -10 for both (no skipped day there).
     assert lines["b"][3] == str(sessions[330 - 10].date())
 
@@ -134,8 +143,18 @@ def test_across_event_table_on_simulated_data():
     assert list(table["window"].unique()) == ["[-1,+1]", "[-5,+5]"]
     wide = table[table["window"] == "[-1,+1]"].set_index("group")
     # The failed event is a cut and is not counted: 6 cuts ok, not 7.
-    assert wide["n_ok"].to_dict() == {"all": 15, "cut": 6, "increase": 5, "hold": 4}
-    assert wide["tested"].to_dict() == {"all": True, "cut": True, "increase": True, "hold": False}
+    assert wide["n_ok"].to_dict() == {
+        "all": 15, "cut": 6, "increase": 5, "hold": 4, "saudi_unilateral": 0
+    }  # fmt: skip
+    assert wide["tested"].to_dict() == {
+        "all": True, "cut": True, "increase": True, "hold": False, "saudi_unilateral": False
+    }  # fmt: skip
+    # Headline: [-1,+1], cut and increase only.
+    headline = table[table["headline"]]
+    assert list(zip(headline["window"], headline["group"], strict=True)) == [
+        ("[-1,+1]", "cut"),
+        ("[-1,+1]", "increase"),
+    ]
     assert wide.loc["hold", "note"] == "too few events (N < 5)"
     assert wide.loc["hold", ["mean_car", "bmp_t", "sign_p"]].isna().all()
 
@@ -156,7 +175,7 @@ def test_pilot_sized_results_are_not_tested(capsys):
     assert (table["note"] == "too few events (N < 5)").all()
     run_opec.print_across_event(table, results)
     out = capsys.readouterr().out
-    assert out.count("too few events (N < 5)") == 8  # 4 groups x 2 windows
+    assert out.count("too few events (N < 5)") == 10  # 5 groups x 2 windows
     assert "excluded from the across-event tests: none" in out
 
 
@@ -212,3 +231,52 @@ def test_firm_only_cut_group_with_three_events_says_too_few(capsys):
     assert "too few events (N < 5)" in out
     assert "Left out of the firm_only sample (3)" in out
     assert out.count("time_assumed: announcement time not sourced") == 3
+
+
+def test_saudi_rows_are_kept_out_of_the_group_results():
+    """saudi_unilateral rows are their own group, never in all/cut (DECISIONS.md)."""
+    run_opec = load_script()
+    results = simulated_results(["cut"] * 11)
+    results.loc[5:, "decision_group"] = "saudi_unilateral"
+    table = run_opec.across_event_table(results, ((-1, 1),)).set_index("group")
+    assert table["n_ok"].to_dict() == {
+        "all": 5, "cut": 5, "increase": 0, "hold": 0, "saudi_unilateral": 6
+    }  # fmt: skip
+    direct = across_event_tests(results.iloc[:5], (-1, 1))
+    assert table.loc["cut", "mean_car"] == direct.mean_car
+    assert table.loc["saudi_unilateral", "tested"]
+
+
+def test_caar_paths_are_separate_per_run():
+    run_opec = load_script()
+    assert run_opec.caar_paths(False) == (
+        Path("results") / "opec_abnormal.csv",
+        Path("charts") / "opec_caar.png",
+    )
+    assert set(run_opec.caar_paths(False)).isdisjoint(run_opec.caar_paths(True, True))
+
+
+def test_average_car_path_ends_at_the_mean_wide_car():
+    """The last point of the average path is the group's mean [-5,+5] CAR."""
+    from event_study.runner import run_events
+    from event_study.simulate import fake_returns
+
+    run_opec = load_script()
+    security, benchmark = fake_returns(np.random.default_rng(3), n_days=320)
+    events = pd.DataFrame(
+        {
+            "event_id": ["a", "b", "c"],
+            "decision_group": "ministerial",
+            "direction": ["cut", "cut", "increase"],
+            "surprise_flag": pd.array([pd.NA] * 3, dtype="Int64"),
+            "event_time": pd.NaT,
+            "used_leak": False,
+            "day0": security.index[[150, 200, 250]],
+            "time_assumed": False,
+        }
+    )
+    results, abnormal = run_events(events, security, benchmark)
+    path = run_opec.average_car_path(results, abnormal, "cut")
+    assert list(path.index) == list(range(-5, 6))
+    expected = results.loc[results["direction"] == "cut", "car_[-5,+5]"].mean()
+    assert np.isclose(path.iloc[-1], expected)

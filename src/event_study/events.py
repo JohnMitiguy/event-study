@@ -36,6 +36,15 @@ Row rules:
 - Day 0 can be computed from the event time (event_days.event_day_zero),
   which fails for times outside the trading calendar.
 
+Mask-only file (load_mask_events, e.g. events/opec_mask_only.csv): real
+news that is not a tested event (a failed meeting, a decision outside the
+sample, a release not yet entered). Its days are skipped in the events'
+estimation windows, but it is never run, tested or averaged. Columns are
+MASK_COLUMNS; event_id, announcement_datetime_et, time_assumed and
+source_url follow the rules above, and reason (why it is masked and not an
+event) must be filled in. There is no leak column: the announcement time
+sets day 0.
+
 Daylight saving: each naive time gets the America/New_York zone, which picks
 EST or EDT from the date (including the pre-2007 US rules). Two kinds of
 wall-clock time are rejected because they do not name one moment:
@@ -78,6 +87,7 @@ REQUIRED_COLUMNS = (
     "notes",
     "time_assumed",
 )
+MASK_COLUMNS = ("event_id", "announcement_datetime_et", "time_assumed", "source_url", "reason")
 DECISION_GROUPS = ("ministerial", "voluntary_group", "saudi_unilateral")
 DIRECTIONS = ("cut", "hold", "increase")
 SURPRISE_FLAGS = ("", "0", "1")  # blank means unknown
@@ -197,7 +207,7 @@ def _parse_csv(path: Path, text: str) -> pd.DataFrame:
         ) from err
 
 
-def _read_table(path: Path) -> pd.DataFrame:
+def _read_table(path: Path, required=REQUIRED_COLUMNS) -> pd.DataFrame:
     """Read the CSV with every value as text, blanks as "" and spaces trimmed.
 
     File-level problems (see the module docstring) raise ValueError starting
@@ -206,7 +216,7 @@ def _read_table(path: Path) -> pd.DataFrame:
     table = _parse_csv(path, _read_text(path))
     for column in table.columns:
         table[column] = table[column].str.strip()
-    missing = [c for c in REQUIRED_COLUMNS if c not in table.columns]
+    missing = [c for c in required if c not in table.columns]
     if missing:
         raise ValueError(f"events file {path} is missing column(s): {', '.join(missing)}")
     return table
@@ -268,14 +278,7 @@ def _check_row(row: dict, use_leak: bool, shift_assumed: bool) -> tuple[dict, li
     # announcement. Untimed leaks never reach here: their row has a blank leak.
     used_leak = use_leak and row["leak_datetime_et"] != ""
     event_time = leak if used_leak else announced
-    day0 = None
-    if event_time is not None:
-        try:
-            day0 = event_day_zero(event_time)
-            if shift_assumed and time_assumed:
-                day0 = next_session(day0)
-        except ValueError as err:
-            errors.append(f"day 0: {err}")
+    day0 = _day0(event_time, shift_assumed and time_assumed, errors)
 
     parsed = {
         "announcement_datetime_et": announced,
@@ -286,6 +289,22 @@ def _check_row(row: dict, use_leak: bool, shift_assumed: bool) -> tuple[dict, li
         "time_assumed": time_assumed,
     }
     return parsed, errors
+
+
+def _day0(event_time: pd.Timestamp | None, shift: bool, errors: list[str]):
+    """Day 0 of event_time, one session later if shift.
+
+    None if event_time is None, or if day 0 can't be computed (the problem
+    is then added to errors).
+    """
+    if event_time is None:
+        return None
+    try:
+        day0 = event_day_zero(event_time)
+        return next_session(day0) if shift else day0
+    except ValueError as err:
+        errors.append(f"day 0: {err}")
+        return None
 
 
 def _duplicate_id_errors(table: pd.DataFrame) -> list[str]:
@@ -354,3 +373,54 @@ def load_events(
         events[column] = pd.Series(values, index=table.index, dtype=dtype)
     events["surprise_flag"] = table["surprise_flag"].map({"": pd.NA, "0": 0, "1": 1}).astype("Int64")
     return events
+
+
+def _check_mask_row(row: dict, shift_assumed: bool) -> tuple[dict, list[str]]:
+    """Check one mask-only row. Returns (parsed values, list of problems)."""
+    errors: list[str] = []
+    for column in ("event_id", "announcement_datetime_et", "source_url", "reason"):
+        if row[column] == "":
+            errors.append(f"{column} is blank")
+    if row["time_assumed"] not in TIME_ASSUMED_FLAGS:
+        shown = ", ".join(repr(a) for a in TIME_ASSUMED_FLAGS)
+        errors.append(f"time_assumed is {row['time_assumed']!r}, must be one of {shown}")
+    time_assumed = row["time_assumed"] == "1"
+    announced = _parse_time(row, "announcement_datetime_et", errors)
+    day0 = _day0(announced, shift_assumed and time_assumed, errors)
+    parsed = {"announcement_datetime_et": announced, "day0": day0, "time_assumed": time_assumed}
+    return parsed, errors
+
+
+def load_mask_events(path: Path | str, shift_assumed: bool = False) -> pd.DataFrame:
+    """Read and check a mask-only CSV (see the module docstring).
+
+    Returns every CSV column plus announcement_datetime_et (tz-aware),
+    time_assumed (bool) and day0 (tz-naive date). shift_assumed moves day 0
+    of time_assumed rows one session later, as in load_events, so a
+    --shift-assumed run masks the same way it dates its events.
+
+    Raises ValueError listing every problem found, like load_events.
+    """
+    path = Path(path)
+    table = _read_table(path, required=MASK_COLUMNS)
+    errors = _duplicate_id_errors(table)
+    parsed_rows = []
+    for i, row in enumerate(table.to_dict("records")):
+        parsed, row_errors = _check_mask_row(row, shift_assumed)
+        parsed_rows.append(parsed)
+        label = row["event_id"] or "no event_id"
+        errors.extend(f"line {i + 2} ({label}): {e}" for e in row_errors)
+    if errors:
+        raise ValueError(
+            f"mask-only file {path} has {len(errors)} problem(s):\n  " + "\n  ".join(errors)
+        )
+
+    masks = table.copy()
+    for column, dtype in (
+        ("announcement_datetime_et", _EASTERN_DTYPE),
+        ("day0", _DAY_DTYPE),
+        ("time_assumed", bool),
+    ):
+        values = [p[column] for p in parsed_rows]
+        masks[column] = pd.Series(values, index=table.index, dtype=dtype)
+    return masks

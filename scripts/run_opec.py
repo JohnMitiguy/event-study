@@ -16,18 +16,25 @@ Steps:
    against the NYSE trading calendar and STOPS with a ValueError on a
    failure: windows count rows, so a missing day would shift every window
    without any error.
-3. Load events/opec_events.csv (leak time used where present). If any
-   event's widest window ends after the cached data ends, STOP and ask for
-   --refresh rather than recording those events as failed.
+3. Load events/opec_events.csv (leak time used where present) and
+   events/opec_mask_only.csv (real news that is not tested: its days are
+   skipped in the estimation windows, nothing more). If any event's widest
+   window ends after the cached data ends, STOP and ask for --refresh rather
+   than recording those events as failed.
 4. Run the market model for every event and print a summary, including each
    failed event and why.
 5. Save results/opec_results.csv, results/opec_run_info.json (which data,
-   settings, events file and code produced the results) and, if any event
-   ran, charts/opec_events.png: one small panel per event with abnormal
-   returns for days -5 to +5.
+   settings, events file and code produced the results),
+   results/opec_abnormal.csv (each event's abnormal return on days -5 to +5)
+   and, if any event ran, charts/opec_events.png (one small panel per event)
+   and charts/opec_caar.png (average cumulative abnormal return by event
+   day for the headline groups).
 6. Across-event tests (aggregate.across_event_tests) for each event window,
-   on all "ok" events and separately for cut, increase and hold, printed and
-   saved to results/opec_across_event.csv. A group with fewer than 5 "ok"
+   on all "ok" group decisions and separately for cut, increase and hold,
+   with saudi_unilateral rows kept out of those groups and tested as their
+   own group (DECISIONS.md). Printed and saved to
+   results/opec_across_event.csv; the headline rows (HEADLINE_WINDOW and
+   HEADLINE_GROUPS) have headline True. A group with fewer than 5 "ok"
    events is not tested and shows "too few events". Every event that is not
    "ok" is listed with its reason. This is done for two samples (the
    `sample` column): "all" events, and "firm_only", which leaves out the
@@ -69,7 +76,7 @@ import yfinance
 from matplotlib.ticker import PercentFormatter
 
 from event_study.aggregate import MIN_EVENTS, across_event_tests, excluded_events
-from event_study.events import DIRECTIONS, load_events
+from event_study.events import DIRECTIONS, load_events, load_mask_events
 from event_study.prices import (
     cache_path,
     dates_sha256,
@@ -95,6 +102,14 @@ from event_study.windows import (
 SECURITY = "XLE"
 BENCHMARK = "SPY"
 EVENTS_PATH = Path("events") / "opec_events.csv"
+MASK_PATH = Path("events") / "opec_mask_only.csv"
+
+# The headline result, fixed before the first full run (DECISIONS.md): the
+# cross-sectional t on [-1,+1], for cuts and increases separately. They
+# predict opposite signs, so the pooled "all" row is descriptive only.
+HEADLINE_WINDOW = (-1, 1)
+HEADLINE_GROUPS = ("cut", "increase")
+SAUDI = "saudi_unilateral"
 
 # Event days drawn in each panel. Must lie inside the widest event window.
 CHART_DAYS = range(-5, 6)
@@ -109,6 +124,8 @@ CAPTION_LINE_HEIGHT_IN = 1.3 * CAPTION_FONTSIZE / 72
 
 # Colors from the same palette as plot_prices.py.
 DAY0 = "#2a78d6"
+# One color per headline group (categorical slots 1 and 2, as in plot_prices.py).
+GROUP_COLORS = {"cut": "#2a78d6", "increase": "#eb6834"}
 OTHER_DAYS = "#c3c2b7"
 TEXT_SECONDARY = "#52514e"
 GRID = "#e6e5e0"
@@ -160,6 +177,15 @@ def output_paths(official_time: bool, shift_assumed: bool = False) -> tuple[Path
         Path("results") / f"opec_results{suffix}.csv",
         Path("results") / f"opec_run_info{suffix}.json",
         Path("charts") / f"opec_events{suffix}.png",
+    )
+
+
+def caar_paths(official_time: bool, shift_assumed: bool = False) -> tuple[Path, Path]:
+    """(abnormal returns CSV, average-CAR chart PNG); the run suffix keeps runs apart."""
+    suffix = run_suffix(official_time, shift_assumed)
+    return (
+        Path("results") / f"opec_abnormal{suffix}.csv",
+        Path("charts") / f"opec_caar{suffix}.png",
     )
 
 
@@ -265,6 +291,8 @@ def build_run_info(
         "shift_assumed": shift_assumed,
         "events_file": EVENTS_PATH.as_posix(),
         "events_file_sha256": file_sha256(EVENTS_PATH),
+        "mask_file": MASK_PATH.as_posix(),
+        "mask_file_sha256": file_sha256(MASK_PATH),
         "yfinance_version": yfinance.__version__,
         "pandas_version": pd.__version__,
         "git_commit": commit,
@@ -284,7 +312,8 @@ def print_run_info(info: dict) -> None:
     used = info["returns_used"]
     print(f"  returns used: {used['first_date']} to {used['last_date']}, {used['rows']} rows")
     print(
-        f"  events file sha256 {info['events_file_sha256'][:12]}, use_leak {info['use_leak']}, "
+        f"  events file sha256 {info['events_file_sha256'][:12]}, "
+        f"mask file sha256 {info['mask_file_sha256'][:12]}, use_leak {info['use_leak']}, "
         f"shift_assumed {info['shift_assumed']}"
     )
     commit = info["git_commit"][:12] if info["git_commit"] else "unavailable"
@@ -304,18 +333,24 @@ def print_summary(results: pd.DataFrame) -> None:
     header = f"{'event_id':<24} {'day 0':<10}"
     for window in DEFAULT_EVENT_WINDOWS:
         header += f" {'CAR ' + window_label(window):>14} {'t':>6}"
-    print("\n" + header + f" {'masked':>6} {'nearby':>6}")
+    print("\n" + header + f" {'masked':>6} {'nearby':>6} {'n_mask':>6}")
     for _, row in ran.iterrows():
         line = f"{row['event_id']:<24} {row['day0'].date()!s:<10}"
         for window in DEFAULT_EVENT_WINDOWS:
             line += f" {row[car_column(window)]:>+14.2%} {row[stat_column(window)]:>6.2f}"
-        print(line + f" {row['est_masked_days']:>6} {row['nearby_events']:>6}")
+        print(
+            line
+            + f" {row['est_masked_days']:>6} {row['nearby_events']:>6} {row['nearby_mask_events']:>6}"
+        )
 
 
 def across_event_table(results: pd.DataFrame, windows) -> pd.DataFrame:
     """One row per window and group: N ok, mean CAR and the four tests.
 
-    Groups are "all" and then each direction (cut, increase, hold). A group
+    Groups are "all" and then each direction (cut, increase, hold), all
+    without saudi_unilateral rows, and then saudi_unilateral on its own
+    (DECISIONS.md: a separate subsample, never averaged into the main
+    result). headline is True for HEADLINE_WINDOW and HEADLINE_GROUPS. A group
     is a filter on the finished results table, never on the events table
     (DECISIONS.md: dropping an event beforehand would change its neighbours'
     estimation windows). N counts rows with status "ok" only. A group with
@@ -324,7 +359,13 @@ def across_event_table(results: pd.DataFrame, windows) -> pd.DataFrame:
     straight from aggregate.across_event_tests, which still raises
     ValueError for things like identical CARs.
     """
-    groups = {"all": results} | {d: results[results["direction"] == d] for d in DIRECTIONS}
+    saudi = results["decision_group"] == SAUDI
+    group_rows = results[~saudi]
+    groups = (
+        {"all": group_rows}
+        | {d: group_rows[group_rows["direction"] == d] for d in DIRECTIONS}
+        | {SAUDI: results[saudi]}
+    )
     rows = []
     for window in windows:
         for group, subset in groups.items():
@@ -335,6 +376,7 @@ def across_event_table(results: pd.DataFrame, windows) -> pd.DataFrame:
                 "group": group,
                 "n_ok": n_ok,
                 "tested": tested,
+                "headline": tuple(window) == HEADLINE_WINDOW and group in HEADLINE_GROUPS,
                 "note": "" if tested else f"too few events (N < {MIN_EVENTS})",
             }
             if tested:
@@ -349,7 +391,7 @@ def across_event_table(results: pd.DataFrame, windows) -> pd.DataFrame:
                 }
             rows.append(row)
     columns = [
-        "window", "group", "n_ok", "tested", "mean_car",
+        "window", "group", "n_ok", "tested", "headline", "mean_car",
         "cross_sectional_t", "bmp_t", "wilcoxon_p", "sign_p", "note",
     ]  # fmt: skip
     return pd.DataFrame(rows, columns=columns)
@@ -371,15 +413,17 @@ def time_assumed_excluded(results: pd.DataFrame) -> pd.DataFrame:
 
 def print_across_event(table: pd.DataFrame, results: pd.DataFrame) -> None:
     """The across-event table, then every event that is not "ok" and why."""
-    print("\nAcross-event tests (two-sided; events assumed independent, see aggregate.py):")
+    print("\nAcross-event tests (two-sided; events assumed independent, see aggregate.py).")
+    print("* = headline result, fixed before the first full run; 'all' is descriptive only.")
     for window, part in table.groupby("window", sort=False):
         print(f"\n  Window {window}")
         print(
-            f"    {'group':<9} {'N ok':>4} {'mean CAR':>9} {'CS t':>7} {'BMP t':>7} "
+            f"    {'group':<17} {'N ok':>4} {'mean CAR':>9} {'CS t':>7} {'BMP t':>7} "
             f"{'Wilcoxon p':>11} {'sign p':>7}"
         )
         for _, row in part.iterrows():
-            line = f"    {row['group']:<9} {row['n_ok']:>4} "
+            mark = "*" if row["headline"] else " "
+            line = f"  {mark} {row['group']:<17} {row['n_ok']:>4} "
             if row["tested"]:
                 line += (
                     f"{row['mean_car']:>+9.2%} {row['cross_sectional_t']:>7.2f} "
@@ -416,17 +460,21 @@ def print_dates_only(table: pd.DataFrame) -> None:
     print(f"\n{len(table)} event(s); no returns, regressions or CARs computed.\n")
     print(
         f"{'event_id':<24} {'day 0':<10} {'est_start':<10} {'est_end':<10} "
-        f"{'masked':>6} {'est_span':>8} {'nearby':>6}"
+        f"{'masked':>6} {'est_span':>8} {'nearby':>6} {'n_mask':>6}"
     )
     for _, row in table.iterrows():
         line = f"{row['event_id']:<24} {row['day0'].date()!s:<10} "
         if pd.isna(row["error"]):
             line += (
                 f"{row['est_start'].date()!s:<10} {row['est_end'].date()!s:<10} "
-                f"{row['est_masked_days']:>6} {row['est_span_days']:>8} {row['nearby_events']:>6}"
+                f"{row['est_masked_days']:>6} {row['est_span_days']:>8} {row['nearby_events']:>6} "
+                f"{row['nearby_mask_events']:>6}"
             )
         else:
-            line += f"{'-':<10} {'-':<10} {'-':>6} {'-':>8} {row['nearby_events']:>6}  {row['error']}"
+            line += (
+                f"{'-':<10} {'-':<10} {'-':>6} {'-':>8} {row['nearby_events']:>6} "
+                f"{row['nearby_mask_events']:>6}  {row['error']}"
+            )
         print(line)
 
 
@@ -505,9 +553,92 @@ def draw_chart(
     # Leave room at the bottom for the caption's lines, plus a little padding.
     n_lines = caption.count("\n") + 1
     bottom = (n_lines * CAPTION_LINE_HEIGHT_IN + 0.15) / fig_height
-    fig.tight_layout(rect=(0, bottom, 1, 1))
+    # Keep the top half inch for the title, so it never runs into the first row.
+    fig.tight_layout(rect=(0, bottom, 1, 1 - 0.5 / fig_height))
     fig.savefig(chart_path, dpi=150)
     print(f"Saved {chart_path}")
+
+
+def load_masks(shift_assumed: bool) -> pd.DataFrame:
+    """The mask-only rows (MASK_PATH), printed as a list."""
+    masks = load_mask_events(MASK_PATH, shift_assumed=shift_assumed)
+    print(f"\nMask-only events ({len(masks)}; skipped in estimation windows, never tested):")
+    for _, row in masks.iterrows():
+        print(f"  {row['event_id']} (day 0 {row['day0'].date()}): {row['reason']}")
+    return masks
+
+
+def average_car_path(results: pd.DataFrame, abnormal: pd.DataFrame, group: str) -> pd.Series:
+    """Average cumulative abnormal return by event day for one direction.
+
+    Mean abnormal return across the group's "ok" events on each day, summed
+    from the first day of the widest window (-5 by default). The last value
+    is the group's mean [-5,+5] CAR.
+    """
+    ids = results.loc[(results["status"] == "ok") & (results["direction"] == group), "event_id"]
+    return abnormal.loc[ids].mean().cumsum()
+
+
+def draw_caar_chart(
+    results: pd.DataFrame, abnormal: pd.DataFrame, data_end: pd.Timestamp, path: Path
+) -> None:
+    """One line per headline group: average CAR from day -5 through each day.
+
+    Saudi unilateral rows are left out, as in the headline tests.
+    """
+    group_rows = results[results["decision_group"] != SAUDI]
+    fig, ax = plt.subplots(figsize=(7, 4.2))
+    for group in HEADLINE_GROUPS:
+        path_ = average_car_path(group_rows, abnormal, group)
+        n = int(((group_rows["status"] == "ok") & (group_rows["direction"] == group)).sum())
+        if n == 0:
+            continue
+        color = GROUP_COLORS[group]
+        ax.plot(path_.index, path_.to_numpy(), color=color, linewidth=2, marker="o", markersize=4)
+        label = f"{group.capitalize()}s (N = {n}): {path_.iloc[-1]:+.1%}"
+        ax.annotate(
+            label,
+            (path_.index[-1], path_.iloc[-1]),
+            xytext=(6, 0),
+            textcoords="offset points",
+            va="center",
+            fontsize=9,
+            color=TEXT_SECONDARY,
+        )
+    ax.axhline(0, color=BASELINE, linewidth=1)
+    ax.axvline(0, color=GRID, linewidth=1, zorder=0)
+    days = list(CHART_DAYS)
+    ax.set_xticks(days)
+    ax.xaxis.set_major_formatter(lambda x, _: f"{x:+.0f}".replace("-", "−") if x != 0 else "0")
+    ax.yaxis.set_major_formatter(PercentFormatter(xmax=1, decimals=0))
+    ax.set_xlim(days[0] - 0.5, days[-1] + 3.5)  # room for the end labels
+    ax.set_xlabel("Trading days from the OPEC+ decision (day 0)", fontsize=9, color=TEXT_SECONDARY)
+    ax.tick_params(labelsize=8, colors=TEXT_SECONDARY)
+    ax.grid(axis="y", color=GRID, linewidth=0.8)
+    ax.set_axisbelow(True)
+    ax.spines[["top", "right"]].set_visible(False)
+    ax.set_title(
+        f"{SECURITY} average cumulative abnormal return around OPEC+ decisions",
+        fontsize=11,
+        loc="left",
+    )
+    caption = (
+        f"Abnormal return = {SECURITY} return minus a market model on {BENCHMARK}, fitted on "
+        f"{DEFAULT_EST_LENGTH} trading days ending day -{DEFAULT_GAP}. Cumulated from day "
+        f"{days[0]}. Source: Yahoo Finance adjusted close, data through {data_end.date()}."
+    )
+    fig.text(
+        0.01,
+        0.01,
+        wrap_caption(caption, fig.get_size_inches()[0]),
+        fontsize=CAPTION_FONTSIZE,
+        color=TEXT_SECONDARY,
+        va="bottom",
+    )
+    fig.tight_layout(rect=(0, 0.08, 1, 1))
+    path.parent.mkdir(parents=True, exist_ok=True)
+    fig.savefig(path, dpi=150)
+    print(f"Saved {path}")
 
 
 def dates_only(prices: dict[str, pd.Series], use_leak: bool, shift_assumed: bool = False) -> None:
@@ -519,8 +650,14 @@ def dates_only(prices: dict[str, pd.Series], use_leak: bool, shift_assumed: bool
     placeholders = {t: pd.Series(0.0, index=p.index[1:]) for t, p in prices.items()}
     security, _ = common_dates(placeholders[SECURITY], placeholders[BENCHMARK])
     events = load_events(EVENTS_PATH, use_leak=use_leak, shift_assumed=shift_assumed)
+    masks = load_masks(shift_assumed)
     table = estimation_dates(
-        security.index, events, DEFAULT_EST_LENGTH, DEFAULT_GAP, DEFAULT_EVENT_WINDOWS
+        security.index,
+        events,
+        DEFAULT_EST_LENGTH,
+        DEFAULT_GAP,
+        DEFAULT_EVENT_WINDOWS,
+        masks["day0"],
     )
     print_dates_only(table)
 
@@ -548,9 +685,16 @@ def main() -> None:
 
     # 3-4. Events, the data-coverage check, and the market model.
     events = load_events(EVENTS_PATH, use_leak=use_leak, shift_assumed=shift)
+    masks = load_masks(shift)
     stop_if_data_too_short(events, security.index[-1])
     results, abnormal = run_events(
-        events, security, benchmark, DEFAULT_EST_LENGTH, DEFAULT_GAP, DEFAULT_EVENT_WINDOWS
+        events,
+        security,
+        benchmark,
+        DEFAULT_EST_LENGTH,
+        DEFAULT_GAP,
+        DEFAULT_EVENT_WINDOWS,
+        masks["day0"],
     )
     print_summary(results)
 
@@ -580,8 +724,12 @@ def main() -> None:
     across.to_csv(across_path, index=False)
     print(f"Saved {across_path}")
 
+    abnormal_path, caar_path = caar_paths(args.official_time, shift)
+    abnormal.to_csv(abnormal_path)
+    print(f"Saved {abnormal_path}")
     if (results["status"] == "ok").any():
         draw_chart(results, abnormal, security.index[-1], chart_path, results_path)
+        draw_caar_chart(results, abnormal, security.index[-1], caar_path)
     else:
         print("No events ran, so no chart.")
 

@@ -1,14 +1,22 @@
 # Status
 
-Last updated: 2026-10-21 (end of session)
+Last updated: 2026-10-26 (end of session)
 
 ## Where we are
 
-- `events/opec_events.csv` holds 37 events (3 renamed pilots plus 34 new rows from the "Ready to enter" list in `events/opec_candidates.md`). Ids are `opec_YYYY_MM_DD`. New rows have the paraphrase in `notes` with "Quote pending"; no quotes, times or confounds were invented. Rows 13 and 22 of the candidates file say "confound check pending" in `notes`; `confound_note` is blank everywhere new.
-- The time_assumed rule is in (DECISIONS.md, README, loader, runner, script). 14 of the 37 rows are `time_assumed` (placeholder 12:00 ET, not a real time). Results are reported three ways: all events, without time_assumed rows (a filter on the full run's results; `sample` column in `opec_across_event.csv`), and day 0 shifted one trading day later (`--shift-assumed`, `*_day0_shifted` outputs). In the without-time_assumed report the cut group has 3 events and shows "too few events (N < 5)".
-- The dates table was checked with `--dates-only` (all 37 events have full 120-day estimation windows, no errors, `nearby_events` is 0 for all). Saved untracked as `events/dates_table.csv`. A8 (9 Apr 2020) and A10 (6 Jun 2020) have estimation windows through the Feb to Mar 2020 crash (open call 6).
-- **No full run has been done on the 37 events.** `results/` still holds the 3-event pilot output.
-- Tests: ruff clean, 397 passed, 2 skipped.
+- **First full run done** on the 37 events (main, `--shift-assumed`, `--official-time`), all 37 ok, 0 failed, prices through 2026-10-15. Run on uncommitted code, so every `opec_run_info*.json` says `git_dirty: true`; rerun after committing.
+- Headline (cross-sectional t, [-1,+1]): cuts N 7, +1.51%, t 1.56; increases N 17, -0.51%, t -0.49. Both null. Increases on [-5,+5]: -3.26%, t -2.38 (BMP -2.47, Wilcoxon p 0.045), t stays between -2.03 and -2.79 when any one event is dropped. Most of the cut move is before day 0 (+3.10% by day -1).
+- Shifted run: cuts [-1,+1] +0.80% (t 0.57), increases -0.82% (t -0.89). Firm-only: cuts 3 (too few), increases -0.52% (t -0.85), [-5,+5] -3.66% (t -3.04). Official-time run identical to main (the one leak is the same day as its release).
+- opec_2025_04_03 is the biggest single event: [-1,+1] -12.40% (t -6.09) during the 3-4 Apr 2025 selloff (SPY -4.9%, -5.8%). confound_note is not filled; needs a sourced check by the user.
+- README now has a Results section, the average-CAR chart (`charts/opec_caar.png`), a filled Excluded events table, and fixes for the stale lines found in the 21 Oct audit.
+- Tests: ruff clean, 411 passed, 2 skipped.
+
+## Changed this session (needs DECISIONS.md lines from the user)
+
+- `events/opec_mask_only.csv` (8 rows, all opec.org slugs already in `opec_candidates.md`): 30 Nov 2016 OPEC-only cut, 5 Mar 2020 (covers the failed 6 Mar meeting), 5 Jan 2021, 1 Apr 2021 (A14), 5 Jul 2021 failed meeting, 3 Aug 2022, 5 Sep 2022, 4 Jun 2023. `events.load_mask_events` loads it; `run_events`/`estimation_dates` take `mask_day0s`; masks are skipped like other events' windows but get no results row. New diagnostic `nearby_mask_events` (1 for opec_2016_12_10 and opec_2021_07_18: mask news inside their own [-5,+5]). Run info records the mask file hash.
+- `events/dates_table.csv` regenerated with masks: longest span still 197 sessions, no errors.
+- Across-event groups: saudi_unilateral rows are kept out of all/cut/hold/increase and tested as their own group. `headline` column (True for [-1,+1] cut and increase), marked `*` in the printout.
+- New outputs: `results/opec_abnormal*.csv` and `charts/opec_caar*.png`. Fixed the per-event chart title running into the first row.
 
 ## Built
 
@@ -25,46 +33,18 @@ Last updated: 2026-10-21 (end of session)
 - time_assumed support: `time_assumed` column (required, blank/0/1, rejected with a leak time), `load_events(shift_assumed=...)` using `event_days.next_session`, `time_assumed` carried into results, `--shift-assumed` flag, and a `sample` column (`all`, `firm_only`) in the across-event CSV. A group below 5 ok events shows "too few events (N < 5)" (this replaces the older "not tested" wording below).
 - Tests (including property-based and fuzz tests), Ruff, and CI.
 
-## Pilot (run 2026-10-21)
-
-Three events entered from the user's values (now renamed opec_2022_10_05, opec_2025_11_02, opec_2023_04_02 and part of the 37-event CSV): opec_2022_10 (leak time used), opec_2025_11, opec_2023_04. The results below are from the 3-event CSV and will change once the full list is run, because other events' days are now skipped. The loader accepted all three, and `run_opec.py` (main run, leak time) gave 3 ok, 0 failed. Outputs are in `results/opec_results.csv`, `results/opec_run_info.json` and `charts/opec_events.png`. Rerun the same day with the skipping rule, on the same price cache (same hashes), with uncommitted changes, so run info records `git_dirty: true`.
-
-| event_id | day 0 | est window | masked | CAR [-1,+1] | t | CAR [-5,+5] | t | nearby |
-|---|---|---|---|---|---|---|---|---|
-| opec_2022_10 | 2022-10-05 | 2022-03-31 to 2022-09-21 | 0 | +6.36% | 1.76 | +14.37% | 2.08 | 0 |
-| opec_2025_11 | 2025-11-03 | 2025-04-30 to 2025-10-20 | 0 | +0.12% | 0.07 | +2.57% | 0.72 | 0 |
-| opec_2023_04 | 2023-04-03 | 2022-09-12 to 2023-03-20 | 11 | +2.72% | 0.99 | +8.97% | 1.71 | 0 |
-
-Effect of the skipping rule:
-- opec_2022_10 and opec_2025_11 had nothing to skip; every number is bit-for-bit the same as before.
-- opec_2023_04 now skips all 11 days of opec_2022_10's [-5,+5] window (2022-09-28 to 2022-10-12) and starts 11 sessions earlier (2022-09-12 instead of 2022-09-27). Alpha fell from +0.000714 to -0.001108 a day, beta rose from 0.818 to 0.827, and resid_std went from 1.58% to 1.59%. CAR [-1,+1] went from +2.18% (t 0.80) to +2.72% (t 0.99), and CAR [-5,+5] from +7.00% (t 1.34) to +8.97% (t 1.71). Nearly all of the CAR change comes from alpha (0.18% a day times 3 or 11 days): the 11 skipped days averaged +1.46% a day of XLE return beyond beta times SPY (opec_2022_10's reaction), and the 11 days that replaced them (2022-09-12 to 2022-09-26) averaged -0.53%. Those replacement days were also more volatile (std 2.09% against 1.43%), which is why resid_std rose slightly instead of falling.
-- opec_2025_11 has nothing to skip only because no other 2025 events are in the file yet. The full list will probably add more.
-- No event windows overlap each other (nearby_events is 0 for all three).
-
-Other things seen in the pilot:
-- About 9.9% of opec_2022_10's [-5,+5] CAR comes before day 0 (days -5 to -1).
-- opec_2022_10's residual std (2.08%) is about twice opec_2025_11's (1.07%).
-- The chart caption is now wrapped to the figure width. With a single panel the chart title is still cut off (not an issue with three panels).
-
-Across-event tests on the pilot: every group prints "not tested (N < 5)" (all 3 ok, cut 2, hold 1, increase 0), so `results/opec_across_event.csv` holds no statistics yet. `results/opec_results.csv` and the chart came out identical on rerun; `results/opec_run_info.json` was left as committed (a rerun now would record a dirty tree).
-
 ## Not built yet
 
-- Official-time robustness run: the `--official-time` flag exists, but it has not been run on the pilot events (only opec_2022_10 has a leak time, so only it would change).
 - Saudi unilateral subsample report.
 - Outlier-exclusion robustness run.
 - Brent robustness check.
 
 ## Next
 
-1. Add a `mask_only` flag for real OPEC events left out of the CSV (for example the 30 Nov 2016 OPEC-only decision, open call 7, and the Saudi cuts), so their days are skipped in other events' estimation windows but they are never tested or averaged. Needs a DECISIONS.md entry first (the user edits that file).
-2. First full run on the 37 events (main, then `--shift-assumed`, then `--official-time`), reading the look-back limit and routine-decision rule from `--dates-only` output first.
-3. Saudi unilateral rows from the Saudi Energy Ministry statements (5 Jan 2021 and the others in opec_candidates.md Gaps), and read the 1 Apr 2021 production table (A14, then enter it); also settle rows 2 and 3 of 1B and parked row 6.
-4. Set the look-back limit and the rule for routine monthly decisions from `--dates-only` output before reading any CARs.
-5. Before any non-NYSE security such as Brent, confirm the calendar check covers it.
-6. Review the pilot rows' open items: surprise_flag for opec_2022_10 and opec_2025_11, and confound_note for all three. (opec_2025_11's notes now say it is tagged hold per the pause rule.)
-7. Finish the OPEC+ list: the caveat rows (A14, 1B rows 2 and 3), row 6, and the Saudi rows. Open calls 5 to 7 in `opec_candidates.md` are still open.
-8. Robustness runs: official-time (the `--official-time` flag exists, but the run hasn't been done), outlier exclusion, Saudi subsample, Brent.
-   - The outlier-exclusion run must test the estimation days actually used, not the span from est_start to est_end: the span includes the skipped days of other events' windows.
-   - Subsamples and exclusions should filter the results of the full run, not the events table before it: dropping an event from the table changes the estimation windows of the events after it.
-9. Decide whether to record a power target in DECISIONS.md (the user's call). Until then `/check-results` reports ok counts but does not judge power.
+1. User: paste the DECISIONS.md lines from the 26 Oct session (mask-only list, headline, no look-back cap, Saudi group split) and delete "Calling the across-event tests from run_opec.py" from its "Not built yet" list. Then commit and rerun the three runs so run info is clean.
+2. Source a confound_note for opec_2025_04_03 (3 Apr 2025 selloff), and check the other large rows: opec_2020_12_03 (+9.06%), opec_2021_03_04 (+8.73%), opec_2026_04_05 ([-5,+5] -12.22%).
+3. Sourcing: the Al Jazeera 5 Dec 2019 time zone (opec_2019_12_05), A5 (6 or 7 Dec 2018), the opec_2022_10_05 11:00 official time, the Sep 2016 Algiers releases (slugs 495, 496; inside opec_2016_12_10's estimation window, not masked), A14's table, 1B rows 2, 3, 6. Each one settled moves a row out of the mask file or into the CSV.
+4. Saudi unilateral rows from Saudi Energy Ministry statements (5 Jan 2021 first; then remove mask_2021_01_05).
+5. Outlier-exclusion robustness run (DECISIONS.md rule exists; test the estimation days actually used, filter the full run's results).
+6. Brent robustness check: confirm the calendar check covers a non-NYSE series first.
+7. Open call 5 (A2 on 24 or 25 May 2017) is still open.

@@ -40,9 +40,17 @@ window starts after day -gap of this event, because every window starts
 after day -gap (windows._check_params). So adding a later event never
 changes an earlier event's numbers.
 
+Mask-only events (mask_day0s, from events.load_mask_events): real news
+that is not tested, such as a failed meeting or a decision outside the
+sample. Their widest windows are skipped in every event's estimation window
+exactly like another event's, but they get no results row and are never
+averaged.
+
 nearby_events: other events whose widest window shares a day with this
 event's widest window, so their CARs partly measure the same days. Nothing
-is skipped or dropped because of it.
+is skipped or dropped because of it. nearby_mask_events counts the same for
+mask-only events: news inside this event's own window, which its CAR picks
+up.
 
 Skipped days and nearby_events are counted by NYSE session position
 (event_days.session_position), not by row in the returns data, so events
@@ -77,7 +85,7 @@ CARRIED_COLUMNS = (
 )
 FIT_COLUMNS = ("alpha", "beta", "resid_std", "n")
 ESTIMATION_COLUMNS = ("est_start", "est_end", "est_masked_days")
-DIAGNOSTIC_COLUMNS = ("nearby_events",)
+DIAGNOSTIC_COLUMNS = ("nearby_events", "nearby_mask_events")
 
 
 def widest_window(event_windows) -> tuple[int, int]:
@@ -215,8 +223,11 @@ def _widest_window_sessions(day0s: pd.Series, event_windows) -> list[set[int]]:
     return [set(range(max(p + start, 0), min(p + end + 1, n_sessions))) for p in positions]
 
 
-def other_event_days(day0s: pd.Series, event_windows) -> list[pd.DatetimeIndex]:
-    """For each event, the dates inside every OTHER event's widest window.
+def other_event_days(
+    day0s: pd.Series, event_windows, mask_day0s=()
+) -> list[pd.DatetimeIndex]:
+    """For each event, the dates inside every OTHER event's widest window,
+    and inside every mask-only event's widest window (mask_day0s).
 
     These are the days its estimation window skips (see the module
     docstring). Counted by NYSE session, so every event counts whether or
@@ -224,26 +235,33 @@ def other_event_days(day0s: pd.Series, event_windows) -> list[pd.DatetimeIndex]:
     """
     sessions = nyse_calendar().sessions
     wide_days = _widest_window_sessions(day0s, event_windows)
+    mask_days = _widest_window_sessions(pd.Series(mask_day0s, dtype="datetime64[ns]"), event_windows)
     skip = []
     for i in range(len(wide_days)):
-        others = [days for j, days in enumerate(wide_days) if j != i]
+        others = [days for j, days in enumerate(wide_days) if j != i] + mask_days
         # set().union(*others) combines all the other events' days into one set.
         skip.append(sessions[sorted(set().union(*others))])
     return skip
 
 
-def overlap_diagnostics(day0s: pd.Series, event_windows) -> pd.DataFrame:
-    """nearby_events per event (see the module docstring).
+def overlap_diagnostics(day0s: pd.Series, event_windows, mask_day0s=()) -> pd.DataFrame:
+    """nearby_events and nearby_mask_events per event (see the module docstring).
 
     Returns a frame with the same index as day0s. Days are NYSE session
     positions, so every event counts whether or not the price data covers
     it. Raises ValueError if a day 0 is not an NYSE session.
     """
     wide_days = _widest_window_sessions(day0s, event_windows)
+    mask_days = _widest_window_sessions(pd.Series(mask_day0s, dtype="datetime64[ns]"), event_windows)
     rows = []
     for i, days in enumerate(wide_days):
         others = [other for j, other in enumerate(wide_days) if j != i]
-        rows.append({"nearby_events": sum(1 for other in others if other & days)})
+        rows.append(
+            {
+                "nearby_events": sum(1 for other in others if other & days),
+                "nearby_mask_events": sum(1 for mask in mask_days if mask & days),
+            }
+        )
     return pd.DataFrame(rows, index=day0s.index, columns=list(DIAGNOSTIC_COLUMNS), dtype="Int64")
 
 
@@ -273,6 +291,7 @@ def estimation_dates(
     est_length: int = DEFAULT_EST_LENGTH,
     gap: int = DEFAULT_GAP,
     event_windows=DEFAULT_EVENT_WINDOWS,
+    mask_day0s=(),
 ) -> pd.DataFrame:
     """Where each event's estimation window falls, with no returns involved.
 
@@ -282,7 +301,7 @@ def estimation_dates(
     est_start, est_end, est_masked_days and nearby_events match a real run.
 
     One row per event: event_id, day0, est_start, est_end, est_masked_days,
-    est_span_days, nearby_events and error. est_span_days counts the trading
+    est_span_days, nearby_events, nearby_mask_events and error. est_span_days counts the trading
     days from est_start to est_end inclusive, skipped days included, so it is
     est_length + est_masked_days when day -gap itself was not skipped. An
     event that run_events would record as failed for lack of data has NaT/NaN
@@ -294,12 +313,12 @@ def estimation_dates(
     # dates decide where the windows fall.
     placeholder = pd.Series(0.0, index=dates)
     _check_calendar("dates", placeholder)
-    diagnostics = overlap_diagnostics(events["day0"], event_windows)
-    skip_dates = other_event_days(events["day0"], event_windows)
+    diagnostics = overlap_diagnostics(events["day0"], event_windows, mask_day0s)
+    skip_dates = other_event_days(events["day0"], event_windows, mask_day0s)
 
     rows = []
     for event, skip, nearby in zip(
-        events.to_dict("records"), skip_dates, diagnostics["nearby_events"], strict=True
+        events.to_dict("records"), skip_dates, diagnostics.to_dict("records"), strict=True
     ):
         row = {"event_id": event["event_id"], "day0": event["day0"]}
         try:
@@ -317,7 +336,7 @@ def estimation_dates(
                 "est_masked_days": _masked_days(placeholder, estimation, event["day0"], gap),
                 "est_span_days": last - first + 1,
             }
-        rows.append(row | {"nearby_events": nearby})
+        rows.append(row | nearby)
     columns = [
         "event_id",
         "day0",
@@ -325,14 +344,15 @@ def estimation_dates(
         "est_end",
         "est_masked_days",
         "est_span_days",
-        "nearby_events",
+        *DIAGNOSTIC_COLUMNS,
         "error",
     ]
     table = pd.DataFrame(rows, columns=columns)
     for c in ("est_start", "est_end"):
         table[c] = pd.to_datetime(table[c]).astype("datetime64[ns]")
     return table.astype(
-        {"est_masked_days": "Int64", "est_span_days": "Int64", "nearby_events": "Int64"}
+        {"est_masked_days": "Int64", "est_span_days": "Int64"}
+        | {c: "Int64" for c in DIAGNOSTIC_COLUMNS}
     )
 
 
@@ -343,6 +363,7 @@ def run_events(
     est_length: int = DEFAULT_EST_LENGTH,
     gap: int = DEFAULT_GAP,
     event_windows=DEFAULT_EVENT_WINDOWS,
+    mask_day0s=(),
 ) -> tuple[pd.DataFrame, pd.DataFrame]:
     """Run every event. Returns (results, abnormal).
 
@@ -358,6 +379,9 @@ def run_events(
     the results, not `events`, when reporting a subset: dropping an event
     from `events` changes the estimation windows of the events after it.
 
+    mask_day0s: day 0s of mask-only events (see the module docstring). Their
+    widest windows are skipped too; they get no results row.
+
     abnormal: abnormal returns for events that ran, indexed by event_id, one
     column per event day across the widest window (-5 ... 5 by default).
     Failed events have no row.
@@ -372,8 +396,8 @@ def run_events(
     _check_events(events)
     _check_calendar("security_returns", security_returns)
     _check_calendar("benchmark_returns", benchmark_returns)
-    diagnostics = overlap_diagnostics(events["day0"], event_windows)
-    skip_dates = other_event_days(events["day0"], event_windows)
+    diagnostics = overlap_diagnostics(events["day0"], event_windows, mask_day0s)
+    skip_dates = other_event_days(events["day0"], event_windows, mask_day0s)
 
     number_rows = []
     abnormal_rows = {}

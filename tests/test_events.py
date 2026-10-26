@@ -6,7 +6,13 @@ from pathlib import Path
 import pandas as pd
 import pytest
 
-from event_study.events import REQUIRED_COLUMNS, load_events, parse_eastern
+from event_study.events import (
+    MASK_COLUMNS,
+    REQUIRED_COLUMNS,
+    load_events,
+    load_mask_events,
+    parse_eastern,
+)
 
 REAL_EVENTS_CSV = Path(__file__).parent.parent / "events" / "opec_events.csv"
 
@@ -299,3 +305,76 @@ def test_missing_column(tmp_path):
     row = {c: v for c, v in valid_row().items() if c != "source_url"}
     with pytest.raises(ValueError, match="missing column.*source_url"):
         load_events(write_events(tmp_path, [row], columns=columns))
+
+
+# --- Mask-only file ------------------------------------------------------------
+
+REAL_MASK_CSV = REAL_EVENTS_CSV.parent / "opec_mask_only.csv"
+
+
+def mask_row(**changes) -> dict:
+    """A fake mask-only row that passes every check (Tuesday, 10:00)."""
+    row = {
+        "event_id": "mask_1",
+        "announcement_datetime_et": "2024-06-04 10:00",
+        "time_assumed": "",
+        "source_url": "https://example.com/release",
+        "reason": "fake row for tests",
+    }
+    return row | changes
+
+
+def load_masks(tmp_path: Path, rows: list[dict], shift_assumed: bool = False) -> pd.DataFrame:
+    return load_mask_events(write_events(tmp_path, rows, MASK_COLUMNS), shift_assumed)
+
+
+def test_real_csv_and_mask_file_load():
+    """The committed files pass every check (a typo there would stop the run)."""
+    events = load_events(REAL_EVENTS_CSV)
+    masks = load_mask_events(REAL_MASK_CSV)
+    assert events["event_id"].is_unique and masks["event_id"].is_unique
+    # A mask row is never also a tested event.
+    assert not set(masks["event_id"]) & set(events["event_id"])
+
+
+def test_mask_day0_rolls_like_an_event(tmp_path):
+    # Friday 5 Jul 2024 10:00 is a session; Thursday 4 Jul is a holiday.
+    masks = load_masks(
+        tmp_path,
+        [
+            mask_row(event_id="a", announcement_datetime_et="2024-07-04 10:00"),
+            mask_row(event_id="b", announcement_datetime_et="2024-06-04 16:00"),
+        ],
+    )
+    assert masks["day0"].tolist() == [pd.Timestamp("2024-07-05"), pd.Timestamp("2024-06-05")]
+    assert masks["time_assumed"].tolist() == [False, False]
+
+
+def test_mask_shift_moves_only_time_assumed_rows(tmp_path):
+    rows = [mask_row(event_id="a", time_assumed="1"), mask_row(event_id="b", time_assumed="0")]
+    masks = load_masks(tmp_path, rows, shift_assumed=True)
+    assert masks["day0"].tolist() == [pd.Timestamp("2024-06-05"), pd.Timestamp("2024-06-04")]
+
+
+@pytest.mark.parametrize(
+    ("changes", "message"),
+    [
+        ({"reason": ""}, "reason is blank"),
+        ({"source_url": ""}, "source_url is blank"),
+        ({"time_assumed": "yes"}, "time_assumed is 'yes'"),
+        ({"announcement_datetime_et": "2024-06-04"}, "not in the format"),
+    ],
+)
+def test_bad_mask_row_raises(tmp_path, changes, message):
+    with pytest.raises(ValueError, match=rf"(?s)mask-only file .*line 2 \(mask_1\): .*{message}"):
+        load_masks(tmp_path, [mask_row(**changes)])
+
+
+def test_mask_file_duplicate_id_and_missing_column(tmp_path):
+    with pytest.raises(ValueError, match="'mask_1' is used more than once"):
+        load_masks(tmp_path, [mask_row(), mask_row()])
+    row = mask_row()
+    del row["reason"]
+    path = write_events(tmp_path, [row], MASK_COLUMNS[:-1])
+    with pytest.raises(ValueError, match="missing column"):
+        load_mask_events(path)

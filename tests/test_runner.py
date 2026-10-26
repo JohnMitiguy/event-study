@@ -483,3 +483,41 @@ def test_csv_to_results(sim, tmp_path):
     assert pd.isna(results.loc[0, "error"])
     assert results.loc[0, "t_[-1,+1]"] > 1.96
     assert abnormal.index.tolist() == ["test_event_1"]
+
+
+# --- Mask-only events ----------------------------------------------------------
+
+
+def test_mask_days_are_skipped_and_counted_as_nearby():
+    # Event at 150 (widest window 145..155). Mask at 130 (125..135) falls in
+    # its estimation window; mask at 158 (153..163) overlaps its own window.
+    (skip,) = other_event_days(pd.Series([SESSIONS[150]]), DEFAULT_EVENT_WINDOWS, [SESSIONS[130]])
+    assert skip.equals(SESSIONS[125:136])
+    diag = overlap_diagnostics(
+        pd.Series([SESSIONS[150]]), DEFAULT_EVENT_WINDOWS, [SESSIONS[130], SESSIONS[158]]
+    )
+    assert diag["nearby_events"].tolist() == [0]
+    assert diag["nearby_mask_events"].tolist() == [1]
+
+
+def test_a_mask_acts_like_an_event_with_no_results_row():
+    """Masking row 140 gives the same numbers as running it as a second event."""
+    security, benchmark = session_returns()
+    masked, _ = run_events(make_events([SESSIONS[170]]), security, benchmark, mask_day0s=[SESSIONS[140]])
+    both, _ = run_events(make_events([SESSIONS[140], SESSIONS[170]]), security, benchmark)
+    assert len(masked) == 1
+    assert masked.loc[0, "est_masked_days"] == 11
+    same = [c for c in masked.columns if c not in ("event_id", "nearby_events", "nearby_mask_events")]
+    pd.testing.assert_frame_equal(masked[same], both.iloc[[1]][same].reset_index(drop=True))
+    table = estimation_dates(security.index, make_events([SESSIONS[170]]), mask_day0s=[SESSIONS[140]])
+    assert table.loc[0, "est_start"] == masked.loc[0, "est_start"]
+    assert table.loc[0, "est_masked_days"] == 11
+
+
+def test_no_masks_changes_nothing():
+    security, benchmark = session_returns()
+    events = make_events([SESSIONS[150], SESSIONS[200]])
+    default, _ = run_events(events, security, benchmark)
+    empty, _ = run_events(events, security, benchmark, mask_day0s=[])
+    pd.testing.assert_frame_equal(default, empty)
+    assert default["nearby_mask_events"].tolist() == [0, 0]

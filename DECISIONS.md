@@ -92,9 +92,16 @@ Decision: Meetings that ended with no decision (6 Mar 2020, 1 to 5 Jul 2021) sta
 
 Decision: Weekday events with no timed source are entered with the announcement date and flagged time_assumed; results are reported with all events, without those rows, and with day 0 shifted one trading day later. Reason: the [-1,+1] and [-5,+5] windows absorb a one-day dating error, so a missing time adds a little noise instead of invalidating the event. This replaces the old rule that weekday events need a timed source.
 
+Decision: Real OPEC news that is not a tested event (failed meetings, the pre-sample 30 Nov 2016 cut, releases not yet entered) goes in events/opec_mask_only.csv; its [-5,+5] days are skipped in every event's estimation window, but it is never run or averaged. Reason: those days carry an oil reaction that would bend alpha and beta, and a failed meeting has no direction to test.
+
+Decision: The headline test is the cross-sectional t on [-1,+1], run separately for cuts and increases; the pooled row is descriptive only. Reason: they predict opposite signs and cancel when pooled.
+
+Decision: No cap on estimation look-back; the longest span is 197 sessions. Reason: chosen from the dates table before any CAR was read.
+
+Decision: saudi_unilateral rows are kept out of the all/cut/hold/increase groups and tested as their own group. Reason: implements the separate-subsample rule.
+
 ## Not built yet
 - Official-time robustness run (the --official-time flag exists, but the run has not been done)
 - Saudi unilateral subsample report
 - Outlier-exclusion robustness run
 - Brent robustness check
-- Calling the across-event tests from run_opec.py

@@ -1,9 +1,21 @@
-window,group,n_ok,tested,mean_car,cross_sectional_t,bmp_t,wilcoxon_p,sign_p,note
-"[-1,+1]",all,3,False,,,,,,not tested (N < 5)
-"[-1,+1]",cut,2,False,,,,,,not tested (N < 5)
-"[-1,+1]",hold,1,False,,,,,,not tested (N < 5)
-"[-1,+1]",increase,0,False,,,,,,not tested (N < 5)
-"[-5,+5]",all,3,False,,,,,,not tested (N < 5)
-"[-5,+5]",cut,2,False,,,,,,not tested (N < 5)
-"[-5,+5]",hold,1,False,,,,,,not tested (N < 5)
-"[-5,+5]",increase,0,False,,,,,,not tested (N < 5)
+sample,window,group,n_ok,tested,headline,mean_car,cross_sectional_t,bmp_t,wilcoxon_p,sign_p,note
+all,"[-1,+1]",all,37,True,False,0.0021077312081896472,0.3447013431489758,-0.3972921640198054,0.7204289893124951,1.0,
+all,"[-1,+1]",cut,7,True,True,0.015144136477747025,1.5648591499344393,1.4764624819787326,0.15625,0.453125,
+all,"[-1,+1]",hold,13,True,False,0.004577282326907631,0.48270944440012586,-0.2292902707764351,1.0,1.0,
+all,"[-1,+1]",increase,17,True,True,-0.00514868064064773,-0.49290928448322735,-0.7698100422073485,0.7466583251953125,1.0,
+all,"[-1,+1]",saudi_unilateral,0,False,False,,,,,,too few events (N < 5)
+all,"[-5,+5]",all,37,True,False,-0.007659467499253447,-0.8068738187663749,-1.4892271541707605,0.570653132192092,1.0,
+all,"[-5,+5]",cut,7,True,False,0.03338424245512724,1.3957000408060274,1.174514799065929,0.296875,0.453125,
+all,"[-5,+5]",hold,13,True,False,0.0028991954059913246,0.24917887213889606,-0.43172121099038646,0.786865234375,0.5810546875,
+all,"[-5,+5]",increase,17,True,False,-0.03263409029036209,-2.382385100931015,-2.4748632694765704,0.044769287109375,0.332305908203125,
+all,"[-5,+5]",saudi_unilateral,0,False,False,,,,,,too few events (N < 5)
+firm_only,"[-1,+1]",all,23,True,False,0.003766093391590855,0.72145600526379,0.5878679494517406,0.5009052753448486,0.6776394844055176,
+firm_only,"[-1,+1]",cut,3,False,True,,,,,,too few events (N < 5)
+firm_only,"[-1,+1]",hold,7,True,False,0.008221879615335418,1.1026606442339395,0.9099091555240921,0.46875,1.0,
+firm_only,"[-1,+1]",increase,13,True,True,-0.005202685886880932,-0.8474496186728151,-0.6745925171158527,0.541748046875,1.0,
+firm_only,"[-1,+1]",saudi_unilateral,0,False,False,,,,,,too few events (N < 5)
+firm_only,"[-5,+5]",all,23,True,False,-0.00527145974489113,-0.4408946567688905,-0.8451665114435563,0.6433901786804199,1.0,
+firm_only,"[-5,+5]",cut,3,False,False,,,,,,too few events (N < 5)
+firm_only,"[-5,+5]",hold,7,True,False,0.021428241025794582,2.623716628571553,2.384881917173355,0.078125,0.125,
+firm_only,"[-5,+5]",increase,13,True,False,-0.03661891279667953,-3.043032962351215,-3.0476646884957947,0.008056640625,0.09228515625,
+firm_only,"[-5,+5]",saudi_unilateral,0,False,False,,,,,,too few events (N < 5)

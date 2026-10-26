@@ -8,9 +8,9 @@ A finding of "no measurable effect" is a valid result here and gets reported as 
 
 ## Method
 
-For each event, a market model is fitted by ordinary least squares: XLE's daily return regressed on SPY's, over an estimation window that ends before the event (by default 120 trading days, ending 10 trading days before day 0). Days inside another event's widest event window (days -5 to +5 of that event, with the default windows) are left out, and the window reaches further back instead, so the regression still uses 120 days, none of them inside another event's window. The results show each event's first and last estimation day (`est_start`, `est_end`) and how many days were skipped (`est_masked_days`). The abnormal return on each day around the event is XLE's actual return minus what the model predicted from SPY that day. Abnormal returns are summed into cumulative abnormal returns (CARs) over short windows, by default days -1 to +1 and -5 to +5. Day 0 is the first trading day the market could react to the news (the leak time if there was a credible timed leak, otherwise the official announcement). All windows count trading days, not calendar days. Returns are simple daily returns from adjusted close prices.
+For each event, a market model is fitted by ordinary least squares: XLE's daily return regressed on SPY's, over an estimation window that ends before the event (by default 120 trading days, ending 10 trading days before day 0). Days inside another event's widest event window (days -5 to +5 of that event, with the default windows) are left out, and the window reaches further back instead. The same goes for real OPEC news that is not tested, such as failed meetings, listed in `events/opec_mask_only.csv` (see [Excluded events](#excluded-events)), so the regression still uses 120 days, none of them inside another event's window. The results show each event's first and last estimation day (`est_start`, `est_end`) and how many days were skipped (`est_masked_days`). The abnormal return on each day around the event is XLE's actual return minus what the model predicted from SPY that day. Abnormal returns are summed into cumulative abnormal returns (CARs) over short windows, by default days -1 to +1 and -5 to +5. Day 0 is the first trading day the market could react to the news (the leak time if there was a credible timed leak, otherwise the official announcement). All windows count trading days, not calendar days. Returns are simple daily returns from adjusted close prices.
 
-The plan is to average CARs across events and test the average. The across-event tests (cross-sectional t-test, standardized-CAR test, Wilcoxon signed-rank and sign test) exist in `src/event_study/aggregate.py`, but `run_opec.py` does not call them yet, so a run produces only per-event CARs and per-event test statistics. Methodology choices and the reasons for them are in [DECISIONS.md](DECISIONS.md).
+CARs are then averaged across events and the average is tested: cross-sectional t-test (primary), standardized-CAR (BMP) test and Wilcoxon signed-rank test (robustness), and a sign test (reported only). Cuts, increases and holds are tested separately, because cuts should push XLE up and increases push it down, so pooling them cancels out. The headline was fixed before the first full run: the cross-sectional t on [-1,+1], for cuts and for increases. Saudi unilateral actions are a separate group and never enter the main averages. Methodology choices and the reasons for them are in [DECISIONS.md](DECISIONS.md).
 
 ## Project layout
 
@@ -18,7 +18,7 @@ The plan is to average CARs across events and test the average. The across-event
 src/event_study/   the library: prices, events loader, trading-day logic, windows, market model, runner
 tests/             pytest tests (no network, no price cache needed)
 scripts/           run_opec.py (the study), plus demos, the null calibration and a price chart
-events/            the hand-filled events CSV
+events/            the hand-filled events CSV, the mask-only list and the candidate list
 results/           output CSV and run info from the last run
 charts/            saved charts
 data/              downloaded price cache (not in git)
@@ -35,6 +35,7 @@ uv run pytest                        # run the tests
 uv run python scripts/run_opec.py    # run the OPEC+ study
 uv run python scripts/run_opec.py --official-time    # robustness check: official announcement times, not leaks
 uv run python scripts/run_opec.py --shift-assumed   # robustness check: day 0 of time_assumed rows one trading day later
+uv run python scripts/run_opec.py --dates-only      # where each estimation window falls; no returns or CARs
 ```
 
 `--shift-assumed` writes to `*_day0_shifted` files in the same way.
@@ -56,14 +57,42 @@ Text after a command is passed along as extra notes, for example `/review-last f
 
 ## Results
 
-A pilot ran on three events to check the pipeline end to end. No results are reported yet. The pilot's output is in `results/` and `charts/opec_events.png`; the other charts in `charts/` are either price charts or come from simulated data, not from real events.
+First full run, 26 Oct 2026: 37 OPEC+ decisions from Dec 2016 to Oct 2026, all 37 ran (none failed), prices through 15 Oct 2026. Event time is the leak time where there is one (one event), otherwise the announcement.
+
+![XLE average cumulative abnormal return around OPEC+ decisions](charts/opec_caar.png)
+
+| Group | N | Mean CAR [-1,+1] | t | Mean CAR [-5,+5] | t |
+|---|---|---|---|---|---|
+| Cuts | 7 | +1.51% | 1.56 | +3.34% | 1.40 |
+| Increases | 17 | -0.51% | -0.49 | -3.26% | -2.38 |
+| Holds | 13 | +0.46% | 0.48 | +0.29% | 0.25 |
+
+t is the cross-sectional t-test. The headline is the [-1,+1] column for cuts and increases.
+
+**What it says.**
+
+- **The headline is a null result.** XLE moves the way theory says (up after cuts, down after increases), but neither [-1,+1] average is statistically different from zero. With only 7 cuts, a test at 5% would need a much larger average reaction to register.
+- **Increases show a slower drift.** Over [-5,+5] the 17 increases average -3.26% (t -2.38; BMP t -2.47; Wilcoxon p 0.045). Dropping any single event keeps t between -2.03 and -2.79. This window was not the headline, so treat it as suggestive, not as the finding.
+- **Much of the move comes before day 0.** By day -1, cuts are already up +3.10% on average and increases down -2.02%. That fits decisions being reported or expected days before the official release. The 10-day gap before the estimation window keeps this run-up out of the baseline.
+
+**Robustness.**
+
+- **Day 0 one trading day later for the 14 rows with an assumed announcement time:** cuts [-1,+1] +0.80% (t 0.57), increases -0.82% (t -0.89), increases [-5,+5] -3.08% (t -2.39).
+- **Without those 14 rows:** only 3 cuts remain, too few to test. Increases (N 13) are -0.52% on [-1,+1] (t -0.85) and -3.66% on [-5,+5] (t -3.04).
+- **Official announcement time instead of the leak:** the numbers are identical, because the one leak (5 Oct 2022) came the same morning as the release.
+
+**Largest single event.** On 3 Apr 2025 (opec_2025_04_03, an increase), the [-1,+1] CAR is -12.40% (t -6.09). Those days were a broad selloff: SPY fell 4.9% and 5.8% on 3 and 4 Apr, and XLE fell 7.9% and 9.2%. Part of XLE's drop may come from other oil news, not the OPEC+ decision. A sourced confound check for that row is pending.
+
+Outputs: `results/opec_results.csv` (per event), `results/opec_across_event.csv` (group tests, both samples), `results/opec_abnormal.csv` (daily abnormal returns), `charts/opec_events.png` (one panel per event). The robustness runs write the same files with `_day0_shifted` or `_official_time` added. `results/opec_run_info.json` records the data hashes, settings and git commit of each run.
 
 ## Limitations
 
 - **Confounding news.** A CAR picks up everything that moved XLE relative to SPY in the window, not only the OPEC+ decision. Other news on the same days (an oil supply shock, a big energy company's earnings, a market-wide selloff that hits energy harder) can look like an event effect. The `confound_note` column records known cases, but it can't catch everything, and longer windows are more exposed.
 - **Thin samples.** OPEC+ decisions are infrequent, and some subgroups (for example Saudi unilateral actions, which are reported separately) will have only a handful of events. With few events the cross-event test has little power, and one unusual event can drive the average.
-- **Few events without the assumed times.** In the without-`time_assumed` report only 3 of the 7 cuts remain (below the 5-event minimum), so the cut group shows "too few events" there and is not tested. The all-events cut group and the shifted run do not have this problem, but they rest on assumed announcement times.
-- **Overlapping events.** An event's estimation window skips other events' window days and reaches further back, so it can span more than 120 trading days and its beta comes from a slightly older period (`est_start` shows how far back). Only the other events' window days are skipped, not their run-up days before the window. Only events in the events CSV count: events outside it, including those listed under [Excluded events](#excluded-events), and other event types are not skipped. Events whose event windows overlap each other (`nearby_events` above 0) still measure some of the same days, and nothing adjusts for that.
+- **Few events without the assumed times.** 14 of the 37 events have no sourced announcement time (`time_assumed`). In the without-`time_assumed` report only 3 of the 7 cuts remain (below the 5-event minimum), so the cut group shows "too few events" there and is not tested. The all-events cut group and the shifted run do not have this problem, but they rest on assumed announcement times.
+- **Long look-back for 2025 and 2026 events.** OPEC+ decided monthly from 2025, so the recent events sit close together. Their estimation windows skip 44 to 77 days and stretch back up to 197 trading days, so their baselines come from an older period. No cap on the look-back was set (DECISIONS.md).
+- **2020 baselines.** The April and June 2020 events are fitted on windows that include the March 2020 crash (beta 1.28 and 1.34, residual std 1.7% and 2.0% a day, against a median of 1.2% for all events). Their per-event t statistics are small because of that noise.
+- **Overlapping events.** An event's estimation window skips other events' window days and reaches further back, so it can span more than 120 trading days and its beta comes from a slightly older period (`est_start` shows how far back). Only the other events' window days are skipped, not their run-up days before the window. Only events in the events CSV and the mask-only list count. Other news, and other event types, are not skipped. Events whose event windows overlap each other (`nearby_events` above 0) still measure some of the same days, and nothing adjusts for that.
 - **The test statistic ignores estimation error.** The per-event statistic divides the CAR by the residual standard deviation times the square root of the window length. It treats the fitted alpha and beta as exact, which slightly understates the true uncertainty, more so for longer windows.
 - **Calibration used simulated normal noise.** The test statistic was checked on simulated events with no planted effect, to confirm it doesn't flag effects too often by chance. That simulation used normally distributed returns. Real daily returns have fatter tails, so on real data the test may produce false positives somewhat more often than the calibration suggests.
 - **XLE is part of SPY.** Energy stocks are in the S&P 500, so part of any energy move also shows up in the benchmark. The overlap is small, but it slightly dampens measured abnormal returns.
@@ -84,21 +113,21 @@ One row per event. Fill it in from primary sources only.
 
 | Column | Meaning |
 |---|---|
-| `event_id` | Short unique slug, like `opec_2020_04_12`. |
+| `event_id` | `opec_YYYY_MM_DD` from the event date, like `opec_2023_04_02`. |
 | `announcement_datetime_et` | Naive Eastern time, format `YYYY-MM-DD HH:MM`. |
 | `leak_datetime_et` | Earliest report from Reuters, Bloomberg or WSJ stating the specific outcome (direction, and size for cuts and increases) from named or multiple sources. Naive Eastern time, format `YYYY-MM-DD HH:MM`. Blank if none. |
 | `leak_source_url` | Link to the report behind `leak_datetime_et`. Blank if none. |
-| `decision_group` | `ministerial` = a decision from a full OPEC+ ministerial meeting. `voluntary_group` = a decision by the subset of members making voluntary cuts or output adjustments. `saudi_unilateral` = an action by Saudi Arabia alone, such as an extra voluntary cut or an official selling price change. Edge cases get a note in `notes`. |
+| `decision_group` | `ministerial` = a decision from a full OPEC+ ministerial meeting. `voluntary_group` = a decision by the subset of members making voluntary cuts or output adjustments. `saudi_unilateral` = a production action by Saudi Arabia alone, such as an extra voluntary cut. Edge cases get a note in `notes`. |
 | `direction` | `cut`, `hold`, or `increase`. |
 | `surprise_flag` | `1` if the outcome differed from consensus expectations, else `0`. Blank if unknown. |
-| `confound_note` | Other major news that day, like a market-wide crash. |
+| `confound_note` | Specific, dated, sourced news inside [-1,+1] that plausibly hit energy differently from the broad market. Market-wide moves are left out (the market model handles them), and flagged events stay in the main run. |
 | `source_url` | Primary source for the announcement date and time (OPEC press release, Reuters). |
 | `notes` | Anything else. |
 | `time_assumed` | `1` for a weekday event with no timed source: `announcement_datetime_et` is then the announcement date with a placeholder time (12:00), not a real one. `0` or blank otherwise. Not allowed on a row with a leak time. |
 
 Rules:
 
-- **The time must place the event against the close.** A row needs a time precise enough to place the event against the close. If the source gives only a date, enter a representative time and write `date-only` in `notes`, plus the reason every plausible time gives the same day 0 (for example: Sunday meeting, any time gives Monday; weekday Vienna meeting ending in business hours, before the US close). If the date alone cannot settle day 0, don't enter the row; list it under [Excluded events](#excluded-events) with the reason. Leak times must be exact, from a timestamped source.
+- **The time must place the event against the close.** A row needs a time precise enough to place the event against the close. If the source gives only a date, enter a representative time and write `date-only` in `notes`, plus the reason every plausible time gives the same day 0 (for example: Sunday meeting, any time gives Monday; weekday Vienna meeting ending in business hours, before the US close). If the date alone cannot settle day 0, the row is entered under the `time_assumed` rule below. Leak times must be exact, from a timestamped source.
 - **Weekday events with no timed source are kept.** Enter the announcement date with a placeholder time, set `time_assumed` to `1` and say so in `notes`. Results are reported three ways: all events, without the `time_assumed` rows, and with day 0 of those rows shifted one trading day later (`--shift-assumed`). The without-`time_assumed` report is a filter on the full run's results, so it leaves the events table alone.
 - **Untimed leaks are not used.** If a leak is known only by date, without a time, leave `leak_datetime_et` and `leak_source_url` blank so the event falls back to `announcement_datetime_et`. Write in `notes` that an untimed leak existed, and list the leak under [Excluded events](#excluded-events).
 - **Leak fields go together.** `leak_datetime_et` and `leak_source_url` are either both filled or both blank.
@@ -110,7 +139,19 @@ Rules:
 
 ### Excluded events
 
-Events, or leak timestamps, left out of the CSV, with the reason. `Excluded` is `event` when the whole event was left out (for example, the source gives only a date and the date alone cannot settle day 0) or `leak` when only the leak was left out (for example, an untimed leak) and the event uses its announcement time.
+Events, or leak timestamps, left out of the CSV, with the reason. `Excluded` is `event` when the whole event was left out or `leak` when only the leak was left out (for example, an untimed leak) and the event uses its announcement time. `Masked` says whether the date is in `events/opec_mask_only.csv`, so its days are still skipped in other events' estimation windows.
 
-| Event | Date | Excluded | Reason |
-|---|---|---|---|
+| Event | Date | Excluded | Masked | Reason |
+|---|---|---|---|---|
+| OPEC-only 171st Conference cut | 30 Nov 2016 | event | yes | Before the OPEC+ sample start (Dec 2016). |
+| Joint OPEC+ meeting | 6 Mar 2020 | event | yes (with the 5 Mar Conference) | Ended with no agreement; no outcome release on opec.org. |
+| 10th (Extraordinary) ONOMM | 12 Apr 2020 | event | no | Same reaction days as 9 Apr 2020, merged into opec_2020_04_09. |
+| 13th ONOMM | 5 Jan 2021 | event | yes | Reaffirmed the plan. The Saudi cut that day will be its own saudi_unilateral row once sourced. |
+| 15th ONOMM | 1 Apr 2021 | event | yes | Step sizes are in an attached table not read yet. |
+| 18th ONOMM | 1 to 5 Jul 2021 | event | yes | Adjourned twice, then called off with no decision. |
+| 31st ONOMM | 3 Aug 2022 | event | yes | Not settled whether a one-month +0.1 mb/d step counts as a new decision. |
+| 32nd ONOMM | 5 Sep 2022 | event | yes | Not settled whether reversing that step counts. |
+| 35th ONOMM | 4 Jun 2023 | event | yes | Direction unknown until the attached table is read. |
+| Same-day ONOMM and JMMC releases with no production change | various | event | no | Not a decision (for example 30 Nov 2023, 7 Jun 2026, 2 Aug 2026, 4 Oct 2026). |
+
+Monitoring-only JMMC meetings and releases that only reaffirm a preset step are not events by definition (DECISIONS.md) and are listed in `events/opec_candidates.md`, not here.
