@@ -1,5 +1,21 @@
 # Event study framework
 
+## In 30 seconds
+
+This project tests whether the energy sector (XLE) moves more than the S&P 500 (SPY) would predict around OPEC+ production decisions, using a market-model event study of 37 decisions from Dec 2016 to Oct 2026.
+
+![XLE average cumulative abnormal return around OPEC+ decisions](charts/opec_caar.png)
+
+CAR (cumulative abnormal return) is XLE's return minus what SPY predicts, summed over the window. t is the t-statistic of the average across events.
+
+- **Headline: no significant effect.** Over days -1 to +1, cuts average +1.51% (t 1.56, N 7) and increases -0.51% (t -0.49, N 17). The signs match theory, but neither is statistically different from zero.
+- **Increases drift down over a wider window.** Over days -5 to +5, increases average -3.26% (t -2.38), and this holds in every robustness sample (t -2.42 to -3.19). It was not the pre-set headline window, and one of the 17 increases (3 Apr 2025) lands on the US tariff selloff, so treat it as suggestive.
+- **Most of the cut move comes before day 0.** By day -1, cuts are already up +3.10% on average (cumulated from day -5), consistent with decisions being anticipated or leaked before the official release.
+
+**Rigor:** no look-ahead (each model is fitted only on days well before its event), headline test fixed before the first run, a frozen price snapshot with hashes recorded for every run, 414 automated tests, robustness checks (shifted dates, official times, outlier exclusion), and the null headline reported as a null.
+
+Full method, results and limitations below. Every methodology decision and its reason is logged in [DECISIONS.md](DECISIONS.md).
+
 ## What this is
 
 This project asks a simple question: when a geopolitical event happens, does a stock or sector move more than you would have expected from the market alone? The first case is OPEC+ production decisions and the energy sector, measured with the XLE energy ETF against the S&P 500 (SPY). Later event types are planned: terrorist attacks, tariffs, OFAC sanctions and Red Sea shipping disruptions.
@@ -57,9 +73,7 @@ Text after a command is passed along as extra notes, for example `/review-last f
 
 ## Results
 
-First full run, 26 Oct 2026: 37 OPEC+ decisions from Dec 2016 to Oct 2026, all 37 ran (none failed), prices through 15 Oct 2026. Event time is the leak time where there is one (one event), otherwise the announcement.
-
-![XLE average cumulative abnormal return around OPEC+ decisions](charts/opec_caar.png)
+First full run, 26 Oct 2026: 37 OPEC+ decisions from Dec 2016 to Oct 2026, all 37 ran (none failed), prices through 15 Oct 2026. Event time is the leak time where there is one (one event), otherwise the announcement. The chart is in [In 30 seconds](#in-30-seconds).
 
 | Group | N | Mean CAR [-1,+1] | t | Mean CAR [-5,+5] | t |
 |---|---|---|---|---|---|
