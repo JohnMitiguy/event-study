@@ -36,7 +36,8 @@ Steps:
    with fewer than 5 "ok" events is not tested. The one primary test
    (PRIMARY, DECISIONS.md) has role "primary" and is read unadjusted; every
    other row is "secondary". p_holm is the Holm-adjusted cs_p over the tested
-   "all" rows (3 securities x 2 windows).
+   secondary "all" rows (the other five of 3 securities x 2 windows); the
+   primary has no p_holm.
 
 With --dates-only the script prints, per event, day 0, the estimation window
 (est_start, est_end, skipped days, span) and nearby_events and
@@ -274,13 +275,13 @@ def security_groups(results: pd.DataFrame) -> dict[str, pd.DataFrame]:
 
 
 def holm_p(table: pd.DataFrame) -> pd.Series:
-    """Holm-adjusted cs_p for the tested "all" rows, NaN on every other row.
+    """Holm-adjusted cs_p for the tested secondary "all" rows, NaN elsewhere.
 
-    The family is every tested "all" row (up to 3 securities x 2 windows),
-    the primary included. An "all" row that was not tested is left out of
-    the family.
+    The family is the other five "all" rows of 3 securities x 2 windows
+    (DECISIONS.md): the primary is named in advance and read unadjusted, so
+    it is left out, and so is an "all" row that was not tested.
     """
-    family = table["tested"] & (table["group"] == "all")
+    family = table["tested"] & (table["group"] == "all") & (table["role"] == "secondary")
     adjusted = pd.Series(float("nan"), index=table.index)
     if family.any():
         # multipletests returns (reject, adjusted p-values, ...); [1] is the p-values.
@@ -328,14 +329,16 @@ def print_holm(table: pd.DataFrame) -> None:
     """The cross-sectional p-values of the "all" rows, unadjusted and Holm-adjusted."""
     print(
         "\nCross-sectional t, group 'all' (two-sided). The primary (*) is read from "
-        "cs p, unadjusted; the rest are secondary, with Holm p over the tested rows."
+        "cs p, unadjusted, and has no Holm p; the rest are secondary, with Holm p over "
+        "the tested secondary rows."
     )
     print(f"    {'security':<8} {'window':<8} {'cs p':>7} {'Holm p':>7}")
     for _, row in table[table["group"] == "all"].iterrows():
         mark = "*" if row["role"] == "primary" else " "
         line = f"  {mark} {row['security']:<8} {row['window']:<8} "
         if row["tested"]:
-            line += f"{row['cs_p']:>7.3f} {row['p_holm']:>7.3f}"
+            holm = "-" if pd.isna(row["p_holm"]) else f"{row['p_holm']:.3f}"
+            line += f"{row['cs_p']:>7.3f} {holm:>7}"
         else:
             line += row["note"]
         print(line)

@@ -321,9 +321,10 @@ def test_across_table_has_one_primary_and_holm_over_all_rows(capsys):
     direct = across_event_tests(runs["XLE"], (0, 1))
     assert first["cs_p"] == direct.tests.loc["cross_sectional_t", "p_value"]
 
-    # Holm over the 6 tested "all" rows, blank everywhere else.
-    family = table["tested"] & (table["group"] == "all")
-    assert family.sum() == 6
+    # Holm over the 5 tested secondary "all" rows; blank everywhere else,
+    # the primary included (it is read unadjusted).
+    family = table["tested"] & (table["group"] == "all") & (table["role"] == "secondary")
+    assert family.sum() == 5
     expected = multipletests(table.loc[family, "cs_p"], method="holm")[1]
     assert np.allclose(table.loc[family, "p_holm"], expected)
     assert table.loc[~family, "p_holm"].isna().all()

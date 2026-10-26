@@ -12,7 +12,14 @@ Last updated: 2026-10-26 (end of session)
 - Outlier-exclusion run built (`no_outliers` sample in `opec_across_event*.csv`): top 5 residual days, using one full-sample beta (an assumption, DECISIONS.md does not say which beta), are 2020-11-09, 2020-03-09, 2020-03-18, 2020-04-17, 2020-04-02. 9 Mar 2020 is masked, so it hits no fit. 5 events are dropped (opec_2020_04_09, opec_2020_06_06, opec_2020_12_03, opec_2021_03_04, opec_2021_07_18). Cuts N 6: +1.61% (t 1.41); increases N 15: -0.88% (t -0.93); increases [-5,+5] -3.34% (t -2.44). `runner.estimation_days` gives the fitted days per event.
 - opec_2025_04_03 is the biggest single event: [-1,+1] -12.40% (t -6.09) during the 3-4 Apr 2025 selloff (SPY -4.9%, -5.8%). confound_note now filled (2 Apr tariffs after the close, Fox Business); the other 16 increases average +0.23% (t 0.29) on [-1,+1].
 - README now has a Results section, the average-CAR chart (`charts/opec_caar.png`), a filled Excluded events table, and fixes for the stale lines found in the 21 Oct audit.
-- Tests: ruff clean, 414 passed, 2 skipped.
+- Tests: ruff clean, 442 passed, 2 skipped.
+
+## Supply-route attacks (second event type, built 26 Oct 2026, no events yet)
+
+- Plan approved and decisions committed (560b69d): XLE primary, ITA and GLD secondary, all vs SPY, expected sign positive; primary test XLE [0,+1] cross-sectional t, all attacks pooled; windows [0,+1] and [-5,+5]; Holm p over the other five; two-sided; subgroups route and escalation; counted attacks at least 11 trading days apart; no time_assumed rows; attack runs mask all OPEC events and OPEC masks (main and shifted day 0); OPEC runs do not mask attacks until a v1.1.
+- Built: `src/event_study/reporting.py` (shared helpers moved out of run_opec.py), `group_columns` in the runner, `events.load_supply_route_events` (spacing check), `scripts/run_supply_route.py` (`--dates-only`; no `--refresh`, so the shared XLE/SPY cache is never replaced), header-only `events/supply_route_events.csv` and `events/supply_route_mask_only.csv`, tests in `tests/test_supply_route.py`. OPEC outputs byte-identical after the refactor.
+- The run refuses to start below 5 events. The first `--dates-only` run downloads ITA and GLD once.
+- Next: the user enters attacks one at a time from timestamped primary sources; then `--dates-only`, then the first run, then a README section (GLD beta near zero, ITA overlap with SPY).
 
 ## Changed this session (needs DECISIONS.md lines from the user)
 
