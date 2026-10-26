@@ -1,7 +1,9 @@
 [project]
 name = "event-study"
-version = "0.1.0"
+version = "1.0.0"
 description = "Event study framework measuring market reactions to geopolitical events."
+authors = [{ name = "John Mitiguy" }]
+license = "MIT"
 readme = "README.md"
 requires-python = ">=3.13,<3.14"
 dependencies = [
@@ -13,9 +15,6 @@ dependencies = [
     "tzdata>=2026.5",
     "yfinance>=1.7.0",
 ]
-
-[project.scripts]
-event-study = "event_study:main"
 
 [build-system]
 requires = ["uv_build>=0.13.1,<0.14.0"]

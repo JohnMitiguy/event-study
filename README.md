@@ -1,4 +1,8 @@
-# Event study framework
+# OPEC+ Decisions and Energy Stocks: An Event Study
+
+[![CI](https://github.com/JohnMitiguy/event-study/actions/workflows/ci.yml/badge.svg)](https://github.com/JohnMitiguy/event-study/actions/workflows/ci.yml)
+![Python 3.13](https://img.shields.io/badge/python-3.13-blue)
+[![License: MIT](https://img.shields.io/badge/license-MIT-green)](LICENSE)
 
 ## In 30 seconds
 
@@ -27,49 +31,6 @@ A finding of "no measurable effect" is a valid result here and gets reported as 
 For each event, a market model is fitted by ordinary least squares: XLE's daily return regressed on SPY's, over an estimation window that ends before the event (by default 120 trading days, ending 10 trading days before day 0). Days inside another event's widest event window (days -5 to +5 of that event, with the default windows) are left out, and the window reaches further back instead. The same goes for real OPEC news that is not tested, such as failed meetings, listed in `events/opec_mask_only.csv` (see [Excluded events](#excluded-events)), so the regression still uses 120 days, none of them inside another event's window. The results show each event's first and last estimation day (`est_start`, `est_end`) and how many days were skipped (`est_masked_days`). The abnormal return on each day around the event is XLE's actual return minus what the model predicted from SPY that day. Abnormal returns are summed into cumulative abnormal returns (CARs) over short windows, by default days -1 to +1 and -5 to +5. Day 0 is the first trading day the market could react to the news (the leak time if there was a credible timed leak, otherwise the official announcement). All windows count trading days, not calendar days. Returns are simple daily returns from adjusted close prices.
 
 CARs are then averaged across events and the average is tested: cross-sectional t-test (primary), standardized-CAR (BMP) test and Wilcoxon signed-rank test (robustness), and a sign test (reported only). Cuts, increases and holds are tested separately, because cuts should push XLE up and increases push it down, so pooling them cancels out. The headline was fixed before the first full run: the cross-sectional t on [-1,+1], for cuts and for increases. Saudi unilateral actions are a separate group and never enter the main averages. Methodology choices and the reasons for them are in [DECISIONS.md](DECISIONS.md).
-
-## Project layout
-
-```
-src/event_study/   the library: prices, events loader, trading-day logic, windows, market model, runner
-tests/             pytest tests (no network, no price cache needed)
-scripts/           run_opec.py (the study), plus demos, the null calibration and a price chart
-events/            the hand-filled events CSV, the mask-only list and the candidate list
-results/           output CSV and run info from the last run
-charts/            saved charts
-data/              downloaded price cache (not in git)
-DECISIONS.md       methodology decisions and why
-```
-
-## How to run
-
-Install [uv](https://docs.astral.sh/uv/), then from the project root:
-
-```
-uv sync                              # install Python 3.13 and the packages
-uv run pytest                        # run the tests
-uv run python scripts/run_opec.py    # run the OPEC+ study
-uv run python scripts/run_opec.py --official-time    # robustness check: official announcement times, not leaks
-uv run python scripts/run_opec.py --shift-assumed   # robustness check: day 0 of time_assumed rows one trading day later
-uv run python scripts/run_opec.py --dates-only      # where each estimation window falls; no returns or CARs
-```
-
-`--shift-assumed` writes to `*_day0_shifted` files in the same way.
-
-`--official-time` writes to `results/opec_results_official_time.csv`, `results/opec_run_info_official_time.json` and `charts/opec_events_official_time.png`, so it never overwrites the main outputs.
-
-The first run of `run_opec.py` downloads prices from Yahoo Finance into `data/prices/`; after that it reuses them (see [Price data](#price-data)).
-
-## Methodology reviewer (Claude Code)
-
-`.claude/agents/methodology-reviewer.md` is a Claude Code subagent that hunts for look-ahead bias, window errors, overlap, thin samples, silent failures and code that disagrees with DECISIONS.md. It suggests DECISIONS.md lines for you to add rather than editing anything. It has no edit tools and no web access, and two things restrict what it does: its instructions, which tell it never to change files, and a hook (`.claude/hooks/reviewer_bash_guard.py`, tested in `tests/test_reviewer_hook.py`) that lets its shell run only `git log`, `git diff`, `git status`, `uv run pytest` and `uv run ruff check`, each with a short list of allowed flags. The hook is a backstop, not a guarantee: it blocks anything else it sees, but if it can't start (for example, uv is not installed), Claude Code lets the command run anyway. pytest and ruff also still write their own cache folders. `uv run` may sync `.venv` or `uv.lock` before running pytest or ruff. Run it from Claude Code with:
-
-- `/review-last`: the last commit. Did methodology change without a DECISIONS.md entry, and do tests cover it?
-- `/audit-decisions`: every DECISIONS.md entry checked against the code.
-- `/check-results`: ok and failed counts, overlap diagnostics, sample size and a skeptical reading of `results/`.
-- `/check-events`: the events CSV checked against the rules below, plus a list of rows to verify against their primary sources (by hand, since it can't open URLs).
-
-Text after a command is passed along as extra notes, for example `/review-last focus on day 0`.
 
 ## Results
 
@@ -111,6 +72,38 @@ Outputs: `results/opec_results.csv` (per event), `results/opec_across_event.csv`
 - **The test statistic ignores estimation error.** The per-event statistic divides the CAR by the residual standard deviation times the square root of the window length. It treats the fitted alpha and beta as exact, which slightly understates the true uncertainty, more so for longer windows.
 - **Calibration used simulated normal noise.** The test statistic was checked on simulated events with no planted effect, to confirm it doesn't flag effects too often by chance. That simulation used normally distributed returns. Real daily returns have fatter tails, so on real data the test may produce false positives somewhat more often than the calibration suggests.
 - **XLE is part of SPY.** Energy stocks are in the S&P 500, so part of any energy move also shows up in the benchmark. The overlap is small, but it slightly dampens measured abnormal returns.
+
+## How to run
+
+Install [uv](https://docs.astral.sh/uv/), then from the project root:
+
+```
+uv sync                              # install Python 3.13 and the packages
+uv run pytest                        # run the tests
+uv run python scripts/run_opec.py    # run the OPEC+ study
+uv run python scripts/run_opec.py --official-time    # robustness check: official announcement times, not leaks
+uv run python scripts/run_opec.py --shift-assumed   # robustness check: day 0 of time_assumed rows one trading day later
+uv run python scripts/run_opec.py --dates-only      # where each estimation window falls; no returns or CARs
+```
+
+`--shift-assumed` writes to `*_day0_shifted` files in the same way.
+
+`--official-time` writes to `results/opec_results_official_time.csv`, `results/opec_run_info_official_time.json` and `charts/opec_events_official_time.png`, so it never overwrites the main outputs.
+
+The first run of `run_opec.py` downloads prices from Yahoo Finance into `data/prices/`; after that it reuses them (see [Price data](#price-data)).
+
+## Project layout
+
+```
+src/event_study/   the library: prices, events loader, trading-day logic, windows, market model, runner
+tests/             pytest tests (no network, no price cache needed)
+scripts/           run_opec.py (the study), plus demos, the null calibration and a price chart
+events/            the hand-filled events CSV, the mask-only list and the candidate list
+results/           output CSV and run info from the last run
+charts/            saved charts
+data/              downloaded price cache (not in git)
+DECISIONS.md       methodology decisions and why
+```
 
 ## Price data
 
@@ -170,3 +163,22 @@ Events, or leak timestamps, left out of the CSV, with the reason. `Excluded` is 
 | Same-day ONOMM and JMMC releases with no production change | various | event | no | Not a decision (for example 30 Nov 2023, 7 Jun 2026, 2 Aug 2026, 4 Oct 2026). |
 
 Monitoring-only JMMC meetings and releases that only reaffirm a preset step are not events by definition (DECISIONS.md) and are listed in `events/opec_candidates.md`, not here.
+
+## How this was built
+
+Written in Python 3.13 with pandas, statsmodels and scipy, using Claude Code (an AI coding assistant) as a pair programmer. The research design, every methodology decision in [DECISIONS.md](DECISIONS.md) and the event list are mine; every change was reviewed before it was committed. `CLAUDE.md` holds the standing rules the assistant works under, and `STATUS.md` is the running work log.
+
+### Methodology reviewer
+
+`.claude/agents/methodology-reviewer.md` is a Claude Code subagent that hunts for look-ahead bias, window errors, overlap, thin samples, silent failures and code that disagrees with DECISIONS.md. It suggests DECISIONS.md lines for you to add rather than editing anything. It has no edit tools and no web access, and two things restrict what it does: its instructions, which tell it never to change files, and a hook (`.claude/hooks/reviewer_bash_guard.py`, tested in `tests/test_reviewer_hook.py`) that lets its shell run only `git log`, `git diff`, `git status`, `uv run pytest` and `uv run ruff check`, each with a short list of allowed flags. The hook is a backstop, not a guarantee: it blocks anything else it sees, but if it can't start (for example, uv is not installed), Claude Code lets the command run anyway. pytest and ruff also still write their own cache folders. `uv run` may sync `.venv` or `uv.lock` before running pytest or ruff. Run it from Claude Code with:
+
+- `/review-last`: the last commit. Did methodology change without a DECISIONS.md entry, and do tests cover it?
+- `/audit-decisions`: every DECISIONS.md entry checked against the code.
+- `/check-results`: ok and failed counts, overlap diagnostics, sample size and a skeptical reading of `results/`.
+- `/check-events`: the events CSV checked against the rules below, plus a list of rows to verify against their primary sources (by hand, since it can't open URLs).
+
+Text after a command is passed along as extra notes, for example `/review-last focus on day 0`.
+
+## Author
+
+John Mitiguy, B.A. Economics (Finance minor), UMass Lowell. Questions or comments: open an issue on this repository.

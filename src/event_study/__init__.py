@@ -1,2 +1,1 @@
-def main() -> None:
-    print("Hello from event-study!")
+"""Event study framework: market-model event studies of geopolitical events."""
