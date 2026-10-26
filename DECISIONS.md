@@ -104,6 +104,18 @@ Decision: The outlier run ranks days by XLE return minus one full-sample beta (2
 
 Decision: An event whose day 0 is pinned by a timed news report before the open on the decision day is entered as date-only with that report's time, not time_assumed. Reason: every plausible announcement time then gives the same day 0, which is the existing date-only rule.
 
+Decision: A supply-route attack event is the first attack on, or a named escalation against, Gulf energy facilities, Red Sea shipping or the Strait of Hormuz, entered only with a timestamped primary source (the time_assumed rule applies to OPEC only); counted attacks are at least 11 trading days apart, day 0 to day 0, and later attacks inside that gap go in events/supply_route_mask_only.csv. Reason: first attacks and named escalations carry the news, a timestamp pins day 0, and 11 days keeps [-5,+5] windows from sharing a day.
+
+Decision: Attacks are run on XLE (primary), ITA and GLD, each against an SPY market model, with a positive expected sign for all three. Reason: supply risk should lift energy, defense and the safe-haven asset, and the signs are fixed before any returns are read.
+
+Decision: The primary attack test is the cross-sectional t on [0,+1] for XLE with all attacks pooled; the other five security and window tests ([0,+1] and [-5,+5]) are secondary with Holm-adjusted p-values, and every test stays two-sided. Reason: attacks are not scheduled, so day -1 carries no news, and naming one test first avoids picking the best of six.
+
+Decision: Attack subgroups are route (gulf_facility, red_sea, hormuz) and escalation (first_attack, named_escalation), each tested only with at least 5 ok events. Reason: they replace direction, since every attack has the same expected sign.
+
+Decision: Attack runs also skip the windows of every OPEC event and OPEC mask-only row, using both the main and shifted day 0 of time_assumed OPEC rows; OPEC runs do not skip attack windows until a v1.1 rerun. Reason: OPEC news would bend XLE baselines, and the v1.0.0 OPEC results stay fixed.
+
+Decision: The OPEC event list is not run on ITA or GLD, and the GLD market model uses SPY even though its beta is near zero (noted in the README). Reason: there is no OPEC hypothesis for defense or gold, and one benchmark keeps the specification consistent.
+
 ## Not built yet
 - Official-time robustness run (the --official-time flag exists, but the run has not been done)
 - Saudi unilateral subsample report
