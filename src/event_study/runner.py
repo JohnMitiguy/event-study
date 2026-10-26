@@ -356,6 +356,38 @@ def estimation_dates(
     )
 
 
+def estimation_days(
+    dates: pd.DatetimeIndex,
+    events: pd.DataFrame,
+    est_length: int = DEFAULT_EST_LENGTH,
+    gap: int = DEFAULT_GAP,
+    event_windows=DEFAULT_EVENT_WINDOWS,
+    mask_day0s=(),
+) -> dict[str, pd.DatetimeIndex]:
+    """{event_id: the dates its market model is fitted on}, skipped days left out.
+
+    Placed exactly as in run_events (same skipping, same calendar check), so
+    these are the est_length days of each regression, not the span from
+    est_start to est_end. An event that run_events would record as failed
+    for lack of data is left out of the dict.
+    """
+    _check_windows(event_windows)
+    _check_events(events)
+    placeholder = pd.Series(0.0, index=dates)
+    _check_calendar("dates", placeholder)
+    skip_dates = other_event_days(events["day0"], event_windows, mask_day0s)
+    days = {}
+    for event, skip in zip(events.to_dict("records"), skip_dates, strict=True):
+        try:
+            estimation, _ = slice_windows(
+                placeholder, event["day0"], est_length, gap, event_windows, skip
+            )
+        except EventDataError:
+            continue
+        days[event["event_id"]] = estimation.index
+    return days
+
+
 def run_events(
     events: pd.DataFrame,
     security_returns: pd.Series,

@@ -79,11 +79,12 @@ t is the cross-sectional t-test. The headline is the [-1,+1] column for cuts and
 
 - **Day 0 one trading day later for the 14 rows with an assumed announcement time:** cuts [-1,+1] +0.80% (t 0.57), increases -0.82% (t -0.89), increases [-5,+5] -3.08% (t -2.39).
 - **Without those 14 rows:** only 3 cuts remain, too few to test. Increases (N 13) are -0.52% on [-1,+1] (t -0.85) and -3.66% on [-5,+5] (t -3.04).
+- **Without events fitted on the 5 most extreme days:** the 5 largest XLE-minus-beta-times-SPY days of 2010 to 2026 are 9 Nov 2020 (+13.0%), 9 Mar 2020 (-12.1%), 18 Mar 2020 (-9.1%), 17 Apr 2020 (+7.8%) and 2 Apr 2020 (+6.8%). Five events are fitted on one of them and are dropped (Apr, Jun and Dec 2020, Mar and Jul 2021). Cuts (N 6) are +1.61% on [-1,+1] (t 1.41) and increases (N 15) are -0.88% (t -0.93), with increases at -3.34% on [-5,+5] (t -2.44).
 - **Official announcement time instead of the leak:** the numbers are identical, because the one leak (5 Oct 2022) came the same morning as the release.
 
 **Largest single event.** On 3 Apr 2025 (opec_2025_04_03, an increase), the [-1,+1] CAR is -12.40% (t -6.09). Those days were a broad selloff: SPY fell 4.9% and 5.8% on 3 and 4 Apr, and XLE fell 7.9% and 9.2%. Part of XLE's drop may come from other oil news, not the OPEC+ decision. A sourced confound check for that row is pending.
 
-Outputs: `results/opec_results.csv` (per event), `results/opec_across_event.csv` (group tests, both samples), `results/opec_abnormal.csv` (daily abnormal returns), `charts/opec_events.png` (one panel per event). The robustness runs write the same files with `_day0_shifted` or `_official_time` added. `results/opec_run_info.json` records the data hashes, settings and git commit of each run.
+Outputs: `results/opec_results.csv` (per event), `results/opec_across_event.csv` (group tests for all three samples: all events, without assumed times, without outlier-fitted events), `results/opec_abnormal.csv` (daily abnormal returns), `charts/opec_events.png` (one panel per event). The robustness runs write the same files with `_day0_shifted` or `_official_time` added. `results/opec_run_info.json` records the data hashes, settings and git commit of each run.
 
 ## Limitations
 

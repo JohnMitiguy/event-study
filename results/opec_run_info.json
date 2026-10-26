@@ -44,6 +44,6 @@
   "mask_file_sha256": "28e62bf9d2bb8c729a5936460c26e245420c701610d5bc47f4c1a46345d55271",
   "yfinance_version": "1.7.0",
   "pandas_version": "3.0.6",
-  "git_commit": "bdf131ebdbafbf06fb08169597ff3db53b15509d",
+  "git_commit": "fcd40e893b8af1542b80eff297eaf22eb7b54948",
   "git_dirty": true
 }

@@ -19,6 +19,7 @@ from event_study.market_model import abnormal_returns, car_test, fit_market_mode
 from event_study.runner import (
     CARRIED_COLUMNS,
     estimation_dates,
+    estimation_days,
     events_needing_later_data,
     other_event_days,
     overlap_diagnostics,
@@ -521,3 +522,20 @@ def test_no_masks_changes_nothing():
     empty, _ = run_events(events, security, benchmark, mask_day0s=[])
     pd.testing.assert_frame_equal(default, empty)
     assert default["nearby_mask_events"].tolist() == [0, 0]
+
+
+def test_estimation_days_are_the_fitted_days():
+    """120 days per event, none inside another event's or a mask's window."""
+    security, benchmark = session_returns()
+    events = make_events([SESSIONS[150], SESSIONS[200]], ids=["a", "b"])
+    days = estimation_days(security.index, events, mask_day0s=[SESSIONS[120]])
+    results, _ = run_events(events, security, benchmark, mask_day0s=[SESSIONS[120]])
+    for i, event_id in enumerate(["a", "b"]):
+        assert len(days[event_id]) == DEFAULT_EST_LENGTH
+        assert days[event_id][0] == results.loc[i, "est_start"]
+        assert days[event_id][-1] == results.loc[i, "est_end"]
+    assert not days["a"].isin(SESSIONS[115:126]).any()  # the mask's window
+    assert not days["b"].isin(SESSIONS[145:156]).any()  # a's window
+    # An event with too little history is left out, as run_events would fail it.
+    short = estimation_days(security.index, make_events([SESSIONS[50]], ids=["c"]))
+    assert short == {}

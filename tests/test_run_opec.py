@@ -280,3 +280,31 @@ def test_average_car_path_ends_at_the_mean_wide_car():
     assert list(path.index) == list(range(-5, 6))
     expected = results.loc[results["direction"] == "cut", "car_[-5,+5]"].mean()
     assert np.isclose(path.iloc[-1], expected)
+
+
+def test_largest_residual_days_rank_by_residual_not_raw_return():
+    run_opec = load_script()
+    dates = nyse_calendar().sessions_in_range("2024-01-02", "2024-03-29")
+    rng = np.random.default_rng(5)
+    benchmark = pd.Series(rng.normal(0, 0.01, len(dates)), index=dates)
+    security = 1.5 * benchmark + pd.Series(rng.normal(0, 0.002, len(dates)), index=dates)
+    # Day 10: a market-wide crash (big raw return, small residual).
+    # Day 20: an energy-only jump (residual +6%).
+    benchmark.iloc[10] -= 0.08
+    security.iloc[10] -= 1.5 * 0.08
+    security.iloc[20] += 0.06
+    top = run_opec.largest_residual_days(security, benchmark, 1)
+    assert top.index[0] == dates[20]
+
+
+def test_outlier_filter_drops_only_events_fitted_on_an_outlier_day():
+    run_opec = load_script()
+    results = simulated_results(["cut"] * 3)
+    est = {
+        "sim_0": pd.DatetimeIndex(["2020-01-02", "2020-01-03"]),
+        "sim_1": pd.DatetimeIndex(["2020-01-06"]),
+        "sim_2": pd.DatetimeIndex(["2020-01-07"]),
+    }
+    hits = run_opec.outlier_hits(est, pd.DatetimeIndex(["2020-01-03", "2020-01-08"]))
+    assert hits == {"sim_0": [pd.Timestamp("2020-01-03")]}
+    assert run_opec.without_outliers(results, hits)["event_id"].tolist() == ["sim_1", "sim_2"]

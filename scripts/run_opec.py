@@ -39,7 +39,10 @@ Steps:
    "ok" is listed with its reason. This is done for two samples (the
    `sample` column): "all" events, and "firm_only", which leaves out the
    time_assumed rows (filtered from the same results, never cut from the
-   events table). The time_assumed rows left out are listed too.
+   events table). The time_assumed rows left out are listed too. A third
+   sample, "no_outliers", leaves out every event whose fitted estimation
+   days include one of the OUTLIER_DAYS largest absolute residual days
+   (DECISIONS.md: the outlier-exclusion robustness run).
 
 With --dates-only the script prints, per event, day 0, the estimation window
 (est_start, est_end, skipped days, span in trading days) and nearby_events,
@@ -87,6 +90,7 @@ from event_study.prices import (
 from event_study.runner import (
     car_column,
     estimation_dates,
+    estimation_days,
     events_needing_later_data,
     run_events,
     stat_column,
@@ -398,6 +402,8 @@ def across_event_table(results: pd.DataFrame, windows) -> pd.DataFrame:
 
 
 FIRM_ONLY = "firm_only"
+NO_OUTLIERS = "no_outliers"
+OUTLIER_DAYS = 5
 
 
 def firm_only(results: pd.DataFrame) -> pd.DataFrame:
@@ -409,6 +415,46 @@ def time_assumed_excluded(results: pd.DataFrame) -> pd.DataFrame:
     """The time_assumed rows the firm_only sample leaves out, as event_id, status, reason."""
     rows = results.loc[results["time_assumed"], ["event_id", "status"]]
     return rows.assign(reason="time_assumed: announcement time not sourced").reset_index(drop=True)
+
+
+def largest_residual_days(security: pd.Series, benchmark: pd.Series, k: int) -> pd.Series:
+    """The k days with the largest absolute residual, security minus beta times benchmark.
+
+    Assumption (DECISIONS.md does not say which beta): one OLS slope fitted
+    on the whole return series passed in. Ranking by this residual instead
+    of the raw return leaves out market-wide days that beta already explains.
+    Returns the residuals of those days, largest absolute value first.
+    """
+    beta = security.cov(benchmark) / benchmark.var()
+    residual = security - beta * benchmark
+    return residual.loc[residual.abs().sort_values(ascending=False).index[:k]]
+
+
+def outlier_hits(est_days: dict, outlier_dates: pd.DatetimeIndex) -> dict[str, list]:
+    """{event_id: the outlier dates among its fitted estimation days}, hits only."""
+    hits = {}
+    for event_id, days in est_days.items():
+        found = days.intersection(outlier_dates)
+        if len(found):
+            hits[event_id] = list(found)
+    return hits
+
+
+def without_outliers(results: pd.DataFrame, hits: dict) -> pd.DataFrame:
+    """The results without the events in hits (a filter, not a rerun)."""
+    return results[~results["event_id"].isin(list(hits))]
+
+
+def print_outliers(outliers: pd.Series, hits: dict, results: pd.DataFrame) -> None:
+    """The outlier days, then each event left out of no_outliers and why."""
+    print(f"\nLargest absolute residual days ({len(outliers)}, XLE minus beta x SPY):")
+    for day, value in outliers.items():
+        print(f"  {day.date()}: {value:+.2%}")
+    print(f"\nLeft out of the {NO_OUTLIERS} sample ({len(hits)}):")
+    directions = results.set_index("event_id")["direction"]
+    for event_id, days in hits.items():
+        shown = ", ".join(str(d.date()) for d in days)
+        print(f"  {event_id} ({directions[event_id]}): estimation days include {shown}")
 
 
 def print_across_event(table: pd.DataFrame, results: pd.DataFrame) -> None:
@@ -716,8 +762,30 @@ def main() -> None:
     print("\n=== Sample: without time_assumed rows ===")
     print_across_event(firm_table, firm_results)
     print_time_assumed_excluded(results)
+
+    outliers = largest_residual_days(security, benchmark, OUTLIER_DAYS)
+    est_days = estimation_days(
+        security.index,
+        events,
+        DEFAULT_EST_LENGTH,
+        DEFAULT_GAP,
+        DEFAULT_EVENT_WINDOWS,
+        masks["day0"],
+    )
+    hits = outlier_hits(est_days, outliers.index)
+    clean_results = without_outliers(results, hits)
+    clean_table = across_event_table(clean_results, DEFAULT_EVENT_WINDOWS)
+    print(f"\n=== Sample: without events fitted on the {OUTLIER_DAYS} largest residual days ===")
+    print_across_event(clean_table, clean_results)
+    print_outliers(outliers, hits, results)
+
     across = pd.concat(
-        [all_table.assign(sample="all"), firm_table.assign(sample=FIRM_ONLY)], ignore_index=True
+        [
+            all_table.assign(sample="all"),
+            firm_table.assign(sample=FIRM_ONLY),
+            clean_table.assign(sample=NO_OUTLIERS),
+        ],
+        ignore_index=True,
     )
     across = across[["sample", *all_table.columns]]
     across_path = across_event_path(args.official_time, shift)

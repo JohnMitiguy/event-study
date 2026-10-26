@@ -100,8 +100,9 @@ Decision: No cap on estimation look-back; the longest span is 197 sessions. Reas
 
 Decision: saudi_unilateral rows are kept out of the all/cut/hold/increase groups and tested as their own group. Reason: implements the separate-subsample rule.
 
+Decision: The outlier run ranks days by XLE return minus one full-sample beta (2010 to 2026) times SPY return. Reason: a single beta gives one fixed list of extreme days for every event, picked before any CAR was read.
+
 ## Not built yet
 - Official-time robustness run (the --official-time flag exists, but the run has not been done)
 - Saudi unilateral subsample report
-- Outlier-exclusion robustness run
 - Brent robustness check

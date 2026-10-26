@@ -4,12 +4,13 @@ Last updated: 2026-10-26 (end of session)
 
 ## Where we are
 
-- **First full run done** on the 37 events (main, `--shift-assumed`, `--official-time`), all 37 ok, 0 failed, prices through 2026-10-15. Run on uncommitted code, so every `opec_run_info*.json` says `git_dirty: true`; rerun after committing.
+- **First full run done** on the 37 events (main, `--shift-assumed`, `--official-time`), all 37 ok, 0 failed, prices through 2026-10-15. Rerun on the clean commit fcd40e8: every `opec_run_info*.json` says `git_dirty: false`, and all results CSVs and charts came out byte-for-byte identical to the first run.
 - Headline (cross-sectional t, [-1,+1]): cuts N 7, +1.51%, t 1.56; increases N 17, -0.51%, t -0.49. Both null. Increases on [-5,+5]: -3.26%, t -2.38 (BMP -2.47, Wilcoxon p 0.045), t stays between -2.03 and -2.79 when any one event is dropped. Most of the cut move is before day 0 (+3.10% by day -1).
 - Shifted run: cuts [-1,+1] +0.80% (t 0.57), increases -0.82% (t -0.89). Firm-only: cuts 3 (too few), increases -0.52% (t -0.85), [-5,+5] -3.66% (t -3.04). Official-time run identical to main (the one leak is the same day as its release).
+- Outlier-exclusion run built (`no_outliers` sample in `opec_across_event*.csv`): top 5 residual days, using one full-sample beta (an assumption, DECISIONS.md does not say which beta), are 2020-11-09, 2020-03-09, 2020-03-18, 2020-04-17, 2020-04-02. 9 Mar 2020 is masked, so it hits no fit. 5 events are dropped (opec_2020_04_09, opec_2020_06_06, opec_2020_12_03, opec_2021_03_04, opec_2021_07_18). Cuts N 6: +1.61% (t 1.41); increases N 15: -0.88% (t -0.93); increases [-5,+5] -3.34% (t -2.44). `runner.estimation_days` gives the fitted days per event.
 - opec_2025_04_03 is the biggest single event: [-1,+1] -12.40% (t -6.09) during the 3-4 Apr 2025 selloff (SPY -4.9%, -5.8%). confound_note is not filled; needs a sourced check by the user.
 - README now has a Results section, the average-CAR chart (`charts/opec_caar.png`), a filled Excluded events table, and fixes for the stale lines found in the 21 Oct audit.
-- Tests: ruff clean, 411 passed, 2 skipped.
+- Tests: ruff clean, 414 passed, 2 skipped.
 
 ## Changed this session (needs DECISIONS.md lines from the user)
 
@@ -36,15 +37,14 @@ Last updated: 2026-10-26 (end of session)
 ## Not built yet
 
 - Saudi unilateral subsample report.
-- Outlier-exclusion robustness run.
 - Brent robustness check.
 
 ## Next
 
-1. User: paste the DECISIONS.md lines from the 26 Oct session (mask-only list, headline, no look-back cap, Saudi group split) and delete "Calling the across-event tests from run_opec.py" from its "Not built yet" list. Then commit and rerun the three runs so run info is clean.
+1. Done 26 Oct: DECISIONS.md lines pasted, committed (fcd40e8), clean rerun.
 2. Source a confound_note for opec_2025_04_03 (3 Apr 2025 selloff), and check the other large rows: opec_2020_12_03 (+9.06%), opec_2021_03_04 (+8.73%), opec_2026_04_05 ([-5,+5] -12.22%).
 3. Sourcing: the Al Jazeera 5 Dec 2019 time zone (opec_2019_12_05), A5 (6 or 7 Dec 2018), the opec_2022_10_05 11:00 official time, the Sep 2016 Algiers releases (slugs 495, 496; inside opec_2016_12_10's estimation window, not masked), A14's table, 1B rows 2, 3, 6. Each one settled moves a row out of the mask file or into the CSV.
 4. Saudi unilateral rows from Saudi Energy Ministry statements (5 Jan 2021 first; then remove mask_2021_01_05).
-5. Outlier-exclusion robustness run (DECISIONS.md rule exists; test the estimation days actually used, filter the full run's results).
+5. Done 26 Oct: outlier-exclusion run. User to remove it from DECISIONS.md "Not built yet" and add the beta line.
 6. Brent robustness check: confirm the calendar check covers a non-NYSE series first.
 7. Open call 5 (A2 on 24 or 25 May 2017) is still open.
