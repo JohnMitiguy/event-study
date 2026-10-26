@@ -72,17 +72,20 @@ from event_study.windows import (
     window_label,
 )
 
-# Columns copied from the events table into the results, in this order.
-CARRIED_COLUMNS = (
+# Columns copied from the events table into the results. Every event type
+# has the core columns. The group columns describe the event (for OPEC+:
+# decision_group and direction) and differ between event types, so they are
+# a parameter (group_columns) of run_events. In the results they come right
+# after event_id; see carried_columns.
+CORE_COLUMNS = (
     "event_id",
-    "decision_group",
-    "direction",
     "surprise_flag",
     "event_time",
     "used_leak",
     "day0",
     "time_assumed",
 )
+DEFAULT_GROUP_COLUMNS = ("decision_group", "direction")
 FIT_COLUMNS = ("alpha", "beta", "resid_std", "n")
 ESTIMATION_COLUMNS = ("est_start", "est_end", "est_masked_days")
 DIAGNOSTIC_COLUMNS = ("nearby_events", "nearby_mask_events")
@@ -111,10 +114,24 @@ def window_columns(event_windows) -> list[str]:
     return columns
 
 
-def result_columns(event_windows) -> list[str]:
+def carried_columns(group_columns=DEFAULT_GROUP_COLUMNS) -> list[str]:
+    """Columns copied from the events table: event_id, the group columns,
+    then the rest of CORE_COLUMNS.
+
+    With the default group columns this is event_id, decision_group,
+    direction, surprise_flag, event_time, used_leak, day0, time_assumed.
+    """
+    return [CORE_COLUMNS[0], *group_columns, *CORE_COLUMNS[1:]]
+
+
+# The carried columns for the default (OPEC+) group columns.
+CARRIED_COLUMNS = tuple(carried_columns())
+
+
+def result_columns(event_windows, group_columns=DEFAULT_GROUP_COLUMNS) -> list[str]:
     """Column order of the results table."""
     return [
-        *CARRIED_COLUMNS,
+        *carried_columns(group_columns),
         *FIT_COLUMNS,
         *ESTIMATION_COLUMNS,
         *window_columns(event_windows),
@@ -138,8 +155,16 @@ def _check_windows(event_windows) -> None:
         raise ValueError(f"event_windows lists the same window more than once: {labels}")
 
 
-def _check_events(events: pd.DataFrame) -> None:
-    missing = [c for c in CARRIED_COLUMNS if c not in events.columns]
+def _check_events(events: pd.DataFrame, group_columns=DEFAULT_GROUP_COLUMNS) -> None:
+    """Raise ValueError for bad group_columns, a missing column or duplicate event_ids.
+
+    A group column may not repeat or be a core column: the results table
+    would get the same column twice.
+    """
+    columns = carried_columns(group_columns)
+    if len(set(columns)) < len(columns):
+        raise ValueError(f"group_columns repeats a column or a core column: {list(group_columns)}")
+    missing = [c for c in columns if c not in events.columns]
     if missing:
         raise ValueError(f"events is missing column(s): {', '.join(missing)}")
     if not events["event_id"].is_unique:
@@ -292,6 +317,7 @@ def estimation_dates(
     gap: int = DEFAULT_GAP,
     event_windows=DEFAULT_EVENT_WINDOWS,
     mask_day0s=(),
+    group_columns=DEFAULT_GROUP_COLUMNS,
 ) -> pd.DataFrame:
     """Where each event's estimation window falls, with no returns involved.
 
@@ -306,9 +332,10 @@ def estimation_dates(
     est_length + est_masked_days when day -gap itself was not skipped. An
     event that run_events would record as failed for lack of data has NaT/NaN
     in the date columns and its message in error (missing otherwise).
+    group_columns only sets which columns `events` must have, as in run_events.
     """
     _check_windows(event_windows)
-    _check_events(events)
+    _check_events(events, group_columns)
     # Zeros stand in for returns: slice_windows needs a series, but only its
     # dates decide where the windows fall.
     placeholder = pd.Series(0.0, index=dates)
@@ -363,16 +390,18 @@ def estimation_days(
     gap: int = DEFAULT_GAP,
     event_windows=DEFAULT_EVENT_WINDOWS,
     mask_day0s=(),
+    group_columns=DEFAULT_GROUP_COLUMNS,
 ) -> dict[str, pd.DatetimeIndex]:
     """{event_id: the dates its market model is fitted on}, skipped days left out.
 
     Placed exactly as in run_events (same skipping, same calendar check), so
     these are the est_length days of each regression, not the span from
     est_start to est_end. An event that run_events would record as failed
-    for lack of data is left out of the dict.
+    for lack of data is left out of the dict. group_columns only sets which
+    columns `events` must have, as in run_events.
     """
     _check_windows(event_windows)
-    _check_events(events)
+    _check_events(events, group_columns)
     placeholder = pd.Series(0.0, index=dates)
     _check_calendar("dates", placeholder)
     skip_dates = other_event_days(events["day0"], event_windows, mask_day0s)
@@ -396,14 +425,21 @@ def run_events(
     gap: int = DEFAULT_GAP,
     event_windows=DEFAULT_EVENT_WINDOWS,
     mask_day0s=(),
+    group_columns=DEFAULT_GROUP_COLUMNS,
 ) -> tuple[pd.DataFrame, pd.DataFrame]:
     """Run every event. Returns (results, abnormal).
 
-    events: a table like events.load_events returns; it needs CARRIED_COLUMNS
-    and unique event_ids. security_returns and benchmark_returns must share
-    the same dates (fit_market_model checks this per event).
+    events: a table like events.load_events returns; it needs CORE_COLUMNS,
+    the group_columns and unique event_ids. security_returns and
+    benchmark_returns must share the same dates (fit_market_model checks this
+    per event).
 
-    results: one row per event, columns from result_columns(event_windows).
+    group_columns: the columns that describe each event, copied into the
+    results right after event_id. The default fits the OPEC+ events table;
+    another event type passes its own (or () for none).
+
+    results: one row per event, columns from
+    result_columns(event_windows, group_columns).
     status is "ok" or "failed". Failed events have NaN numbers (NaT for
     est_start and est_end) and a message in `error` (None when the event
     ran). Each event's estimation window skips the days inside every other
@@ -425,7 +461,7 @@ def run_events(
     an estimation window (see the module docstring).
     """
     _check_windows(event_windows)
-    _check_events(events)
+    _check_events(events, group_columns)
     _check_calendar("security_returns", security_returns)
     _check_calendar("benchmark_returns", benchmark_returns)
     diagnostics = overlap_diagnostics(events["day0"], event_windows, mask_day0s)
@@ -468,12 +504,12 @@ def run_events(
         numbers[c] = pd.to_datetime(numbers[c]).astype("datetime64[ns]")
     results = pd.concat(
         [
-            events[list(CARRIED_COLUMNS)].reset_index(drop=True),
+            events[carried_columns(group_columns)].reset_index(drop=True),
             numbers,
             diagnostics.reset_index(drop=True),
         ],
         axis=1,
-    )[result_columns(event_windows)]
+    )[result_columns(event_windows, group_columns)]
 
     start, end = widest_window(event_windows)
     abnormal_table = pd.DataFrame.from_dict(

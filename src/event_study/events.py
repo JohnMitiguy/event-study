@@ -45,6 +45,22 @@ source_url follow the rules above, and reason (why it is masked and not an
 event) must be filled in. There is no leak column: the announcement time
 sets day 0.
 
+Supply-route file (load_supply_route_events, e.g.
+events/supply_route_events.csv): attacks on Gulf energy facilities, Red Sea
+shipping or the Strait of Hormuz. Columns are SUPPLY_ROUTE_COLUMNS. The
+file-level rules, event_id, the two times, the leak rules, surprise_flag
+and source_url follow the rules above. In place of decision_group and
+direction:
+- event_type is "supply_route".
+- route is one of ROUTES and escalation one of ESCALATIONS.
+- time_assumed is blank or 0. Attacks need a timestamped source
+  (DECISIONS.md); the time_assumed rule applies to OPEC+ only.
+- Spacing: once every row is read, the events are sorted by day 0 and each
+  pair of neighbours must be at least min_spacing NYSE sessions apart (11
+  by default, day 0 to day 0). Every pair that is too close is listed,
+  with both event_ids and the gap. Rows whose day 0 could not be computed
+  are left out of this check (their own error is already listed).
+
 Daylight saving: each naive time gets the America/New_York zone, which picks
 EST or EDT from the date (including the pre-2007 US rules). Two kinds of
 wall-clock time are rejected because they do not name one moment:
@@ -59,6 +75,7 @@ with the wrong offset is still a valid Eastern time, just the wrong one.
 """
 
 import io
+import itertools
 import re
 import warnings
 from datetime import datetime
@@ -72,6 +89,7 @@ from event_study.event_days import (
     event_day_zero,
     next_session,
     nyse_calendar,
+    session_position,
 )
 
 REQUIRED_COLUMNS = (
@@ -92,6 +110,32 @@ DECISION_GROUPS = ("ministerial", "voluntary_group", "saudi_unilateral")
 DIRECTIONS = ("cut", "hold", "increase")
 SURPRISE_FLAGS = ("", "0", "1")  # blank means unknown
 TIME_ASSUMED_FLAGS = ("", "0", "1")  # blank means 0 (the time is not assumed)
+
+# Supply-route attacks (load_supply_route_events): the same core columns as
+# OPEC+, with event_type, route and escalation in place of decision_group
+# and direction.
+SUPPLY_ROUTE_COLUMNS = (
+    "event_id",
+    "announcement_datetime_et",
+    "leak_datetime_et",
+    "leak_source_url",
+    "event_type",
+    "route",
+    "escalation",
+    "surprise_flag",
+    "confound_note",
+    "source_url",
+    "notes",
+    "time_assumed",
+)
+SUPPLY_ROUTE_EVENT_TYPE = "supply_route"
+ROUTES = ("gulf_facility", "red_sea", "hormuz")
+ESCALATIONS = ("first_attack", "named_escalation")
+# Attacks need a timestamped source, so time_assumed may not be 1.
+SUPPLY_ROUTE_TIME_ASSUMED_FLAGS = ("", "0")
+# Counted attacks are at least this many trading days apart, day 0 to day 0.
+# 11 keeps two [-5,+5] windows from sharing a day (10 apart share one).
+SUPPLY_ROUTE_MIN_SPACING = 11
 
 DATETIME_FORMAT = "%Y-%m-%d %H:%M"
 # strptime alone would accept "2024-3-4 9:00"; this insists on exact digits.
@@ -234,6 +278,13 @@ def _parse_time(row: dict, column: str, errors: list[str]) -> pd.Timestamp | Non
         return None
 
 
+def _check_allowed(row: dict, column: str, allowed, errors: list[str]) -> None:
+    """Add a problem to errors if row[column] is not one of the allowed values."""
+    if row[column] not in allowed:
+        shown = ", ".join(repr(a) for a in allowed)
+        errors.append(f"{column} is {row[column]!r}, must be one of {shown}")
+
+
 def _check_choices(row: dict, errors: list[str]) -> None:
     """Columns that only take a fixed set of values, plus source_url."""
     for column, allowed in (
@@ -242,20 +293,19 @@ def _check_choices(row: dict, errors: list[str]) -> None:
         ("surprise_flag", SURPRISE_FLAGS),
         ("time_assumed", TIME_ASSUMED_FLAGS),
     ):
-        if row[column] not in allowed:
-            shown = ", ".join(repr(a) for a in allowed)
-            errors.append(f"{column} is {row[column]!r}, must be one of {shown}")
+        _check_allowed(row, column, allowed, errors)
     if row["source_url"] == "":
         errors.append("source_url is blank")
 
 
-def _check_row(row: dict, use_leak: bool, shift_assumed: bool) -> tuple[dict, list[str]]:
-    """Check one row and work out its times.
+def _check_times(row: dict, errors: list[str]) -> tuple[pd.Timestamp | None, pd.Timestamp | None]:
+    """event_id, the two times and the leak rules, shared by every event type.
 
-    Returns (parsed values, list of problems). Parsed values are None where
-    a problem stopped them from being computed.
+    Returns (announcement time, leak time), each None when blank or bad, and
+    adds every problem to errors: a blank event_id or announcement, a bad
+    time, a leak time without its source (or the reverse), a leak that is
+    not earlier than the announcement.
     """
-    errors: list[str] = []
     if row["event_id"] == "":
         errors.append("event_id is blank")
 
@@ -269,6 +319,17 @@ def _check_row(row: dict, use_leak: bool, shift_assumed: bool) -> tuple[dict, li
     # Both are tz-aware, so this compares real moments, not clock readings.
     if announced is not None and leak is not None and leak >= announced:
         errors.append(f"leak time {leak} is not earlier than announcement time {announced}")
+    return announced, leak
+
+
+def _check_row(row: dict, use_leak: bool, shift_assumed: bool) -> tuple[dict, list[str]]:
+    """Check one row and work out its times.
+
+    Returns (parsed values, list of problems). Parsed values are None where
+    a problem stopped them from being computed.
+    """
+    errors: list[str] = []
+    announced, leak = _check_times(row, errors)
     _check_choices(row, errors)
     time_assumed = row["time_assumed"] == "1"
     if time_assumed and row["leak_datetime_et"] != "":
@@ -359,7 +420,16 @@ def load_events(
         raise ValueError(
             f"events file {path} has {len(errors)} problem(s):\n  " + "\n  ".join(errors)
         )
+    return _parsed_events(table, parsed_rows)
 
+
+def _parsed_events(table: pd.DataFrame, parsed_rows: list[dict]) -> pd.DataFrame:
+    """The CSV table plus the parsed columns described in load_events.
+
+    parsed_rows: one dict per row from _check_row or _check_supply_route_row,
+    for a file with no problems (so no value in them is None, except a
+    blank leak time).
+    """
     events = table.copy()
     for column, dtype in (
         ("announcement_datetime_et", _EASTERN_DTYPE),
@@ -424,3 +494,113 @@ def load_mask_events(path: Path | str, shift_assumed: bool = False) -> pd.DataFr
         values = [p[column] for p in parsed_rows]
         masks[column] = pd.Series(values, index=table.index, dtype=dtype)
     return masks
+
+
+def _check_supply_route_choices(row: dict, errors: list[str]) -> None:
+    """event_type, route, escalation, surprise_flag, time_assumed and source_url."""
+    if row["event_type"] != SUPPLY_ROUTE_EVENT_TYPE:
+        errors.append(f"event_type is {row['event_type']!r}, must be {SUPPLY_ROUTE_EVENT_TYPE!r}")
+    for column, allowed in (
+        ("route", ROUTES),
+        ("escalation", ESCALATIONS),
+        ("surprise_flag", SURPRISE_FLAGS),
+    ):
+        _check_allowed(row, column, allowed, errors)
+    # A 1 gets its own message: it is allowed in the OPEC+ file, so it is
+    # the likeliest mistake here.
+    if row["time_assumed"] == "1":
+        errors.append(
+            "time_assumed is '1': attacks need a timestamped source; "
+            "time_assumed applies to OPEC only"
+        )
+    else:
+        _check_allowed(row, "time_assumed", SUPPLY_ROUTE_TIME_ASSUMED_FLAGS, errors)
+    if row["source_url"] == "":
+        errors.append("source_url is blank")
+
+
+def _check_supply_route_row(row: dict, use_leak: bool) -> tuple[dict, list[str]]:
+    """Check one supply-route row and work out its times, like _check_row.
+
+    time_assumed is always False here (a 1 is an error), so day 0 is never
+    shifted.
+    """
+    errors: list[str] = []
+    announced, leak = _check_times(row, errors)
+    _check_supply_route_choices(row, errors)
+    used_leak = use_leak and row["leak_datetime_et"] != ""
+    event_time = leak if used_leak else announced
+    day0 = _day0(event_time, False, errors)
+    parsed = {
+        "announcement_datetime_et": announced,
+        "leak_datetime_et": leak,
+        "event_time": event_time,
+        "used_leak": used_leak,
+        "day0": day0,
+        "time_assumed": False,
+    }
+    return parsed, errors
+
+
+def _spacing_errors(table: pd.DataFrame, parsed_rows: list[dict], min_spacing: int) -> list[str]:
+    """One message per pair of neighbouring events (by day 0) that are too close.
+
+    Gaps are NYSE session positions, day 0 to day 0, so a weekend or holiday
+    does not count. Rows without a day 0 (their own error is already listed)
+    are skipped. Only neighbours are compared: for three events within a few
+    days, the first and second and the second and third are listed.
+    """
+    # (session position, row number) for each row that has a day 0. Sorting
+    # the pairs sorts by position, and by row number when two days tie.
+    placed = sorted(
+        (session_position(p["day0"]), i) for i, p in enumerate(parsed_rows) if p["day0"] is not None
+    )
+    ids = table["event_id"]
+    messages = []
+    for (first_pos, first), (second_pos, second) in itertools.pairwise(placed):
+        gap = second_pos - first_pos
+        if gap >= min_spacing:
+            continue
+        first_id = ids.iloc[first] or "no event_id"
+        second_id = ids.iloc[second] or "no event_id"
+        messages.append(
+            f"lines {first + 2} and {second + 2} ({first_id}, {second_id}): day 0s "
+            f"{parsed_rows[first]['day0'].date()} and {parsed_rows[second]['day0'].date()} are "
+            f"{gap} trading day(s) apart; counted attacks must be at least {min_spacing} apart "
+            "(day 0 to day 0), and the later one belongs in the mask-only file"
+        )
+    return messages
+
+
+def load_supply_route_events(
+    path: Path | str, use_leak: bool = True, min_spacing: int = SUPPLY_ROUTE_MIN_SPACING
+) -> pd.DataFrame:
+    """Read and check a supply-route events CSV (see the module docstring).
+
+    use_leak works as in load_events. min_spacing is the fewest NYSE
+    sessions allowed between two events' day 0s.
+
+    Returns the same parsed columns as load_events (announcement_datetime_et,
+    leak_datetime_et, event_time, used_leak, day0, time_assumed, surprise_flag
+    as 0/1/<NA>), keeping every CSV column. time_assumed is always False.
+    A file with only the header row gives an empty frame.
+
+    Raises ValueError listing every problem found, row problems and spacing
+    problems together, so nothing is partly loaded.
+    """
+    path = Path(path)
+    table = _read_table(path, required=SUPPLY_ROUTE_COLUMNS)
+    errors = _duplicate_id_errors(table)
+    parsed_rows = []
+    for i, row in enumerate(table.to_dict("records")):
+        parsed, row_errors = _check_supply_route_row(row, use_leak)
+        parsed_rows.append(parsed)
+        label = row["event_id"] or "no event_id"
+        errors.extend(f"line {i + 2} ({label}): {e}" for e in row_errors)
+    errors.extend(_spacing_errors(table, parsed_rows, min_spacing))
+    if errors:
+        raise ValueError(
+            f"supply-route events file {path} has {len(errors)} problem(s):\n  "
+            + "\n  ".join(errors)
+        )
+    return _parsed_events(table, parsed_rows)

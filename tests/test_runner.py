@@ -220,6 +220,49 @@ def test_missing_column_raises(sim):
         run_events(events, security, benchmark)
 
 
+def test_default_column_order_is_unchanged():
+    """The OPEC+ results columns, in the order they have always had."""
+    assert result_columns(DEFAULT_EVENT_WINDOWS)[:8] == [
+        "event_id", "decision_group", "direction", "surprise_flag",
+        "event_time", "used_leak", "day0", "time_assumed",
+    ]  # fmt: skip
+    assert list(CARRIED_COLUMNS) == result_columns(DEFAULT_EVENT_WINDOWS)[:8]
+    assert result_columns(DEFAULT_EVENT_WINDOWS)[8:] == [
+        "alpha", "beta", "resid_std", "n", "est_start", "est_end", "est_masked_days",
+        "car_[-1,+1]", "t_[-1,+1]", "car_[-5,+5]", "t_[-5,+5]",
+        "nearby_events", "nearby_mask_events", "status", "error",
+    ]  # fmt: skip
+
+
+def test_other_group_columns_run_without_decision_group_or_direction(sim):
+    """An event type with its own group column, and no OPEC+ columns, runs."""
+    security, benchmark, day0 = sim
+    events = make_events([day0]).drop(columns=["decision_group", "direction"])
+    events["route"] = "red_sea"
+    results, _ = run_events(events, security, benchmark, group_columns=("route",))
+    assert list(results.columns) == result_columns(DEFAULT_EVENT_WINDOWS, ("route",))
+    assert list(results.columns[:3]) == ["event_id", "route", "surprise_flag"]
+    assert "direction" not in results.columns
+    assert results.loc[0, "route"] == "red_sea"
+    assert results.loc[0, "status"] == "ok"
+    # Same numbers as the default run: group columns are only carried along.
+    default, _ = run_events(make_events([day0]), security, benchmark)
+    assert results.loc[0, "car_[-1,+1]"] == default.loc[0, "car_[-1,+1]"]
+    # The date-only helpers take the same group_columns.
+    dates = estimation_dates(security.index, events, group_columns=("route",))
+    assert pd.isna(dates.loc[0, "error"])
+    assert len(estimation_days(security.index, events, group_columns=("route",))) == 1
+    # Without group_columns the OPEC+ columns are still required.
+    with pytest.raises(ValueError, match="missing column.*decision_group"):
+        run_events(events, security, benchmark)
+
+
+def test_group_column_that_repeats_a_core_column_raises(sim):
+    security, benchmark, day0 = sim
+    with pytest.raises(ValueError, match="group_columns repeats"):
+        run_events(make_events([day0]), security, benchmark, group_columns=("day0",))
+
+
 def test_duplicate_event_id_raises(sim):
     security, benchmark, day0 = sim
     events = make_events([day0, day0], ids=["same", "same"])
