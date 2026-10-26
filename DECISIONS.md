@@ -116,6 +116,12 @@ Decision: Attack runs also skip the windows of every OPEC event and OPEC mask-on
 
 Decision: The OPEC event list is not run on ITA or GLD, and the GLD market model uses SPY even though its beta is near zero (noted in the README). Reason: there is no OPEC hypothesis for defense or gold, and one benchmark keeps the specification consistent.
 
+Decision: An official statement copied by a mirror site or quoted in reputable press counts as the primary source for an attack, and a UKMTO or JMIC report time counts as the event time. Reason: originals are often offline, and the report time is when the news reached the market.
+
+Decision: Routes are gulf_facility (an energy facility of a Gulf state, wherever it is), red_sea (Red Sea, Bab el-Mandeb and Gulf of Aden shipping) and hormuz (Persian Gulf, Strait of Hormuz and Gulf of Oman); an attack outside them is masked, not counted. Reason: the routes follow the supply chain, not strict geography.
+
+Decision: A pre-war robustness sample leaves out attacks on or after 2026-02-28, filtered from the full run's results. Reason: the war moves oil on its own, so attacks inside it can't be separated from it.
+
 ## Not built yet
 - Official-time robustness run (the --official-time flag exists, but the run has not been done)
 - Saudi unilateral subsample report

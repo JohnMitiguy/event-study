@@ -19,7 +19,8 @@ Last updated: 2026-10-26 (end of session)
 - Plan approved and decisions committed (560b69d): XLE primary, ITA and GLD secondary, all vs SPY, expected sign positive; primary test XLE [0,+1] cross-sectional t, all attacks pooled; windows [0,+1] and [-5,+5]; Holm p over the other five; two-sided; subgroups route and escalation; counted attacks at least 11 trading days apart; no time_assumed rows; attack runs mask all OPEC events and OPEC masks (main and shifted day 0); OPEC runs do not mask attacks until a v1.1.
 - Built: `src/event_study/reporting.py` (shared helpers moved out of run_opec.py), `group_columns` in the runner, `events.load_supply_route_events` (spacing check), `scripts/run_supply_route.py` (`--dates-only`; no `--refresh`, so the shared XLE/SPY cache is never replaced), header-only `events/supply_route_events.csv` and `events/supply_route_mask_only.csv`, tests in `tests/test_supply_route.py`. OPEC outputs byte-identical after the refactor.
 - The run refuses to start below 5 events. The first `--dates-only` run downloads ITA and GLD once.
-- Next: the user enters attacks one at a time from timestamped primary sources; then `--dates-only`, then the first run, then a README section (GLD beta near zero, ITA overlap with SPY).
+- Candidates saved in `events/supply_route_candidates.md` (39 rows; Q-A/Q-B/Q-C settled at its top; about 20 expected to count after spacing). To build: pre-war sample filter (before 2026-02-28) in run_supply_route.py.
+- Next: enter the counted rows one at a time after checking each source and converting times to ET; then `--dates-only`, then the first run, then a README section (GLD beta near zero, ITA overlap with SPY).
 
 ## Changed this session (needs DECISIONS.md lines from the user)
 

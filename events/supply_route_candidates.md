@@ -1,0 +1,92 @@
+# Supply-route attack events, 2019 to Oct 2026
+
+Candidate list, NOT the events CSV. Rows go into events/supply_route_events.csv one at a time after their source and time are checked; rows that fail the spacing rule or have no stated time go into events/supply_route_mask_only.csv instead.
+
+Settled by John, 26 Oct 2026:
+- Q-A: an official statement copied by a mirror (e.g. GlobalSecurity copy of SPA) or quoted in reputable press counts as the primary source.
+- Q-B: add a pre-war robustness sample (events before 2026-02-28), filtered from the full run's results.
+- Q-C (left to the agent): gulf_facility = an energy facility of a Gulf state, wherever it is (Saudi Red Sea coast sites included); red_sea = Red Sea, Bab el-Mandeb and Gulf of Aden shipping; hormuz = Persian Gulf, Strait of Hormuz and Gulf of Oman. Row 10 (Arabian Sea off Masirah) fits no route and is masked.
+
+Scope: first attacks on, or named escalations against, Gulf energy facilities, Red Sea shipping and the Strait of Hormuz. Compiled 2026-10-26. Extended the same day to cover 2020, Jan to Mar 2022, Nov 2023 to Jan 2024, Red Sea 2025 and 2026, Apr to Jun 2026 and Sep to Oct 2026.
+
+Rules used: times are copied exactly as the source states them, never converted or estimated. NOT FOUND means no source stated it. Oil prices and market reactions are deliberately excluded. An event is listed only if it meets at least one escalation_reason.
+
+Columns:
+- `time_stated`: time exactly as written in the source.
+- `time_zone`: zone exactly as written in the source.
+- `escalation`: first_attack or named_escalation (compiler's judgment).
+- `escalation_reason`: one or more of fatalities, sinking_or_seizure, new_country_facility, after_30_day_lull, source_calls_escalation, first_attack (compiler's judgment, basis in the doubts list where shaky).
+- `confidence`: compiler's rating of the time and event, given source quality and conflicts.
+
+UKMTO warning URLs from the 2026 and 2025 archives are given without the `?rev=` suffix. The file paths were read directly from ukmto.org/ukmto-products/warnings and load without it.
+
+| # | date | time_stated | time_zone | route | escalation | escalation_reason | paraphrase | primary_url | source_type | confidence |
+|---|---|---|---|---|---|---|---|---|---|---|
+| 1 | 2019-05-12 Sun | 06:30 to 08:00 | LT (local) | hormuz | first_attack | first_attack | Four ships at anchor off Fujairah damaged in sabotage | https://www.wam.ae/en/article/hszr8llw-four-commercial-ships-subjected-sabotage | UAE govt via WAM (event); BIMCO advisory (time) | medium |
+| 2 | 2019-05-14 Tue | 06:00 to 06:30 | NOT FOUND | gulf_facility | first_attack | first_attack; new_country_facility | Armed drones hit two East-West pipeline pump stations | https://www.globalsecurity.org/wmd/library/news/saudi/saudi-190514-spa02.htm | Saudi energy minister via SPA, mirror copy | medium |
+| 3 | 2019-06-13 Thu | 06:12 and 07:00 (distress calls) | local time | hormuz | named_escalation | after_30_day_lull | Front Altair and Kokuka Courageous hit in Gulf of Oman | https://www.centcom.mil/MEDIA/PUBLIC-RELEASES/Article/1875666/us-central-command-statement-on-june-13-limpet-mine-attack-in-the-gulf-of-oman/ | CENTCOM statement | high |
+| 4 | 2019-07-19 Fri | about 16:00 | UK time | hormuz | named_escalation | sinking_or_seizure | IRGC boards and seizes UK-flagged Stena Impero | https://www.gov.uk/government/publications/strait-of-hormuz-incident-uk-government-letter-to-un-security-council-president/letter-to-the-united-nations-security-council-president-about-the-strait-of-hormuz-incident | UK govt letter to UN | high |
+| 5 | 2019-09-14 Sat | 03:31 and 03:42 | NOT FOUND | gulf_facility | named_escalation | new_country_facility | Drone and missile strikes hit Abqaiq and Khurais | https://petroleumaustralia.com.au/news_article/drones-reportedly-strike-two-processing-facilities-in-saudi-arabia/ | Energy minister via SPA, quoted by press | medium |
+| 6 | 2020-11-23 Mon | 3.50am | local time | gulf_facility | named_escalation | new_country_facility | Missile hits a fuel tank at Aramco's North Jeddah bulk plant | https://tankterminals.com/news/aramco-facility-out-of-action-after-missile-attack/ | Aramco facility manager via trade press; AP cites SPA for same time | medium |
+| 7 | 2020-11-25 Wed | NOT FOUND | NOT FOUND | red_sea | named_escalation | new_country_facility | Tanker Agrari holed above waterline at Saudi Shuqaiq terminal | https://gcaptain.com/greek-operated-tanker-hit-by-mine-at-saudi-terminal-in-red-sea/ | TMS Tankers statement via Reuters | medium |
+| 8 | 2020-12-14 Mon | 00-40 hrs | local time | red_sea | named_escalation | new_country_facility | Explosive boat hits tanker BW Rhine while discharging at Jeddah | https://www.seatrade-maritime.com/tankers/-external-source-causes-explosion-on-hafnia-tanker-in-jeddah | Hafnia statement via trade press | medium |
+| 9 | 2021-03-07 Sun | NOT FOUND | NOT FOUND | gulf_facility | named_escalation | new_country_facility | Sea-launched drone attacks Ras Tanura tank farm | https://www.globalsecurity.org/military/library/news/2021/03/mil-210307-spa01.htm | Saudi MoD via SPA, mirror copy | medium |
+| 10 | 2021-07-29 Thu | 07:00 and 23:40 (UKMTO); 18:00 (operator) | UTC | hormuz | named_escalation | fatalities | Drone attacks on Mercer Street off Oman, two crew killed | https://www.centcom.mil/MEDIA/PRESS-RELEASES/Press-Release-View/Article/2722418/ | CENTCOM (event); Dryad citing UKMTO and Zodiac via Lloyd's List (times) | low |
+| 11 | 2022-01-17 Mon | about 10:00 | NOT FOUND | gulf_facility | first_attack | fatalities; new_country_facility | Drone strike near ADNOC Mussafah depot kills three | https://arab.news/csdt7 | ADNOC statement via press | medium |
+| 12 | 2022-03-20 Sun | shortly after 5:30 a.m. | local time | gulf_facility | named_escalation | new_country_facility | Drone hits YASREF refinery in Yanbu, output cut | https://www.spglobal.com/energy/en/news-research/latest-news/crude-oil/032022-saudi-arabias-yasref-refinery-output-disrupted-from-attacks-ministry | Saudi energy ministry via S&P Global | medium |
+| 13 | 2022-03-25 Fri | 17:25 | NOT FOUND | gulf_facility | named_escalation | source_calls_escalation | Strike sets fire to Aramco bulk plant in Jeddah | https://www.globalsecurity.org/military/library/news/2022/03/mil-220325-spa01.htm | Coalition spokesman via SPA, mirror copy | medium |
+| 14 | 2023-11-19 Sun | 14:15 | UTC | red_sea | first_attack | first_attack; sinking_or_seizure | Houthis seize Galaxy Leader by helicopter off Hodeidah | https://www.oni.navy.mil/Portals/12/Intel%20agencies/piracy/WTS/20231122%20WTS.pdf | US Navy ONI threat report | medium |
+| 15 | 2023-12-03 Sun | about 9:15 a.m. (first missile, near miss); 12:35 p.m. (first hit) | local time | red_sea | named_escalation | first_attack | First Houthi missile hits on merchant ships: Unity Explorer, Number 9, Sophie II | https://www.centcom.mil/MEDIA/PUBLIC-RELEASES/Article/3605010/houthi-attacks-on-commercial-shipping-in-international-water-continue/ | CENTCOM release; 9:15 time via Seatrade copy | medium |
+| 16 | 2023-12-15 Fri | 06:18 (Al Jasrah); 10:00 (MSC Palatium III) | UTC | red_sea | named_escalation | source_calls_escalation | Al Jasrah and Palatium III hit near Bab el-Mandeb; Maersk and Hapag-Lloyd pause transits | https://www.oni.navy.mil/Archive/FileId/121382 | US Navy ONI threat report | medium |
+| 17 | 2023-12-31 Sun | 6:30am | Sanaa time | red_sea | named_escalation | fatalities | Houthi boats try to board Maersk Hangzhou; US helicopters sink three, crews killed | https://www.centcom.mil/MEDIA/STATEMENTS/Statements-View/Article/3644468/iranian-backed-houthi-small-boats-attack-merchant-vessel-and-us-navy-helicopter/ | CENTCOM statement | high |
+| 18 | 2024-02-18 Sun | 9:30 to 10:45 p.m. | NOT FOUND | red_sea | named_escalation | sinking_or_seizure | Missile strikes Rubymar, later the first ship sunk in the campaign | https://www.centcom.mil/MEDIA/PUBLIC-RELEASES/Article/3680410/feb-18-summary-of-red-sea-activities/ | CENTCOM release | medium |
+| 19 | 2024-03-06 Wed | about 11:30 | Sanaa time | red_sea | named_escalation | fatalities | Missile hits True Confidence, first crew deaths of campaign | https://www.centcom.mil/MEDIA/PUBLIC-RELEASES/Article/3698591/houthis-kill-innocent-civilians-with-missile-attack/ | CENTCOM release | high |
+| 20 | 2025-07-06 Sun | 11:25 | UTC | red_sea | named_escalation | after_30_day_lull; sinking_or_seizure | Magic Seas attacked by small craft, ending a 230-day lull, later sinks | https://www.ukmto.org/-/media/ukmto/products/117-jmic-information-note-_07-july_2025.pdf?rev=125248a21ac343ccacd71615abed2b89 | JMIC Info Note 117 | high |
+| 21 | 2025-07-07 Mon | 16:34 | UTC | red_sea | named_escalation | fatalities; sinking_or_seizure | Eternity C attacked, later sinks with crew deaths | https://hksoa.org/wp-content/uploads/2025/07/MC25100-Annex-A-118-JMIC-Information-Note-_08-JULY_2025.pdf | JMIC Info Note 118, association copy | high |
+| 22 | 2025-08-31 Sun | 1730 | UTC | red_sea | named_escalation | new_country_facility | Projectile lands near tanker Scarlet Ray 40NM southwest of Yanbu, farthest north yet | https://www.ukmto.org/-/media/ukmto/products/20250831-warning-029---25.pdf?rev=175b7070bfc84ec4bcbba0a54905f316 | UKMTO warning 029-25 | medium |
+| 23 | 2025-09-29 Mon | 1251 (UKMTO report); 10:22 (ASPIDES) | UTC | red_sea | named_escalation | fatalities | Minervagracht hit 128NM southeast of Aden, set ablaze; one crew member later dies | https://www.ukmto.org/-/media/ukmto/products/20250929_ukmto_warning_033-25.pdf | UKMTO warning 033-25; ASPIDES via gCaptain (time) | medium |
+| 24 | 2026-03-01 Sun | 0805 (Hercules Star); 0900 (Skylight); 0950 (MKD Vyom) | UTC | hormuz | first_attack | first_attack | First war strikes on ships, earliest 17NM northwest of Mina Saqr | https://www.ukmto.org/-/media/ukmto/products/20260301-ukmto_warning_006-26.pdf | UKMTO warning 006-26 (also 004-26, 005-26) | high |
+| 25 | 2026-03-02 Mon | 7:04 am | local time | gulf_facility | named_escalation | source_calls_escalation | Debris from intercepted drones starts fire at Ras Tanura refinery; units shut | https://gulfnews.com/world/gulf/saudi/saudi-arabia-intercepts-drones-targeting-oil-refinery-debris-sparks-fire-1.500460592 | Saudi energy ministry via press | medium |
+| 26 | 2026-03-02 Mon | NOT FOUND | NOT FOUND | gulf_facility | first_attack | first_attack; new_country_facility | Iranian drones hit Ras Laffan and Mesaieed; LNG output halted | https://qna.org.qa/en/News-Area/News/2026-3/2/defense-ministry-says-two-iranian-drones-target-state-facilities-no-human-casualties | Qatar MoD via QNA | high (event), none (time) |
+| 27 | 2026-03-18 Wed | NOT FOUND | NOT FOUND | gulf_facility | named_escalation | new_country_facility | Missile hits Ras Laffan, damaging Pearl GTL | https://www.qatar-tribune.com/article/224796/latest-news/qatar-intercepted-four-ballistic-missiles-one-fell-in-ras-laffan-industrial-city-mod | Qatar MoD via press | high (event), none (time) |
+| 28 | 2026-03-19 Thu | NOT FOUND | NOT FOUND | gulf_facility | named_escalation | new_country_facility | Further missiles hit several LNG facilities | https://lngprime.com/?p=180695 | QatarEnergy statement via press | medium |
+| 29 | 2026-04-18 Sat | 0920 | UTC | hormuz | named_escalation | source_calls_escalation | IRGC gunboats fire on tanker 20NM northeast of Oman; UKMTO raises threat to critical next day | https://www.ukmto.org/-/media/ukmto/products/20260418---ukmto_warning_037_26.pdf | UKMTO warning 037-26 | high |
+| 30 | 2026-04-22 Wed | 0355 | UTC | hormuz | named_escalation | sinking_or_seizure | IRGC gunboat fires on container ship; IRGC seizes MSC Francesca and Epaminondas | https://www.ukmto.org/-/media/ukmto/products/20260422-ukmto_warning_attack.pdf | UKMTO warning 041-26 (attack); IRGC via press (seizure) | medium |
+| 31 | 2026-05-04 Mon | NOT FOUND | NOT FOUND | gulf_facility | named_escalation | source_calls_escalation | Iranian drone sets fire in Fujairah Oil Industry Zone as US starts Project Freedom | https://worldoil.com/news/2026/5/4/iran-strikes-uae-oil-facilities-escalating-tensions-after-ceasefire/ | Fujairah authorities via Bloomberg | medium |
+| 32 | 2026-06-27 Sat | 0800 | UTC | hormuz | named_escalation | source_calls_escalation | Tanker struck in Hormuz; JMIC raises threat level from moderate to substantial | https://www.ukmto.org/-/media/ukmto/products/20260627-ukmto_warning-076-26.pdf | UKMTO warning 076-26 | high |
+| 33 | 2026-07-05 Sun | 0719 | UTC | red_sea | first_attack | first_attack; after_30_day_lull | Cargo ship 30NM southwest of Hudaydah reports attack by armed assailants, first Red Sea attack of 2026 | https://www.ukmto.org/-/media/ukmto/products/20260705-warning_attack_079-26.pdf | UKMTO warning 079-26 | medium |
+| 34 | 2026-07-06 Mon | 2119 | UTC | hormuz | named_escalation | source_calls_escalation | Tanker hit 8NM east of Limah as truce breaks down; JMIC raises threat to severe | https://www.ukmto.org/-/media/ukmto/products/20260706-ukmto_warning_080-26_attack.pdf?rev=f302d798511e4e51a8293b318c9bc122 | UKMTO warning 080-26 | high |
+| 35 | 2026-07-22 Wed | 2000 | UTC | red_sea | first_attack | first_attack; source_calls_escalation | Tanker set ablaze 70NM southwest of Al Shuqaiq, first strike after Houthi blockade of Saudi Arabia | https://www.ukmto.org/-/media/ukmto/products/20260722-ukmto_warning_attack_095_26.pdf | UKMTO warning 095-26 | high |
+| 36 | 2026-07-26 Sun | NOT FOUND | NOT FOUND | gulf_facility | named_escalation | source_calls_escalation | Houthi strikes on Aramco sites in Jizan and Yanbu | https://www.aljazeera.com/news/2026/7/26/new-front-in-us-iran-war-escalates-as-houthis-fire-at-saudi-oil-facilities | Houthi claim via Al Jazeera; no Saudi time found | low |
+| 37 | 2026-08-04 Tue | 0730 | UTC | red_sea | named_escalation | sinking_or_seizure | Uncrewed surface vessel sets ship ablaze 9NM southwest of Al Mukha; vessel sinks | https://www.ukmto.org/-/media/ukmto/products/20260805-ukmto_warning_105.pdf | UKMTO warning 105-26 (time-late) | medium |
+| 38 | 2026-08-24 Mon | 0637 | UTC | red_sea | named_escalation | new_country_facility | Tanker set ablaze 63NM west of Yanbu, first UKMTO-confirmed hit off Saudi Arabia's main Red Sea port | https://www.ukmto.org/-/media/ukmto/products/20260824-ukmto_warning_119-26.pdf | UKMTO warning 119-26 | medium |
+| 39 | 2026-08-31 Mon | 2050 | UTC | hormuz | named_escalation | fatalities | Tanker incident in Hormuz; two casualties later confirmed dead | https://www.ukmto.org/-/media/ukmto/products/20260902-ukmto_warning_126-update_001.pdf | UKMTO warning 126-26 update 001 (time-late) | high |
+
+## Not found or doubtful
+
+- No attack time found: rows 7 ("before dawn" only), 9 (morning only), 26, 27 ("this evening" only), 28 ("early hours" only), 31, 36.
+- Time conflicts: row 10 (UKMTO 07:00 and 23:40 UTC vs operator 18:00 UTC), row 14 (ONI 14:15 UTC vs US officials' "about 1 p.m. local"), row 5 (03:42 here vs 03:43 in a later SPA text), row 13 (SPA says 17:25; a secondary says about 17:00 local), row 23 (UKMTO report 12:51 UTC vs ASPIDES 10:22 UTC).
+- Date conflict: row 36. Al Jazeera puts the Jizan and Yanbu attacks on Sunday 26 July; FDD's Long War Journal says 25 July.
+- Zone not stated, local implied: rows 2, 5, 11, 13. Row 18: the CENTCOM page gives no zone; a secondary (Fenix) says Sanaa time. Row 1: Al Jazeera's conversion of 6 a.m. to 10:00 GMT is inconsistent with UTC+4 and was not used.
+- Report time, not strike time: UKMTO warnings use a "Report Date / Report Time" header, so times in rows 20 to 24, 29, 30, 32 to 35, 37 to 39 are when the report reached UKMTO. Rows 37 and 39 are time-late reports. Row 3 times are distress calls.
+- Escalation basis that is thin:
+  - Row 3: lull counted from the 12 May Fujairah attack (32 days, no Hormuz attacks found in between).
+  - Row 15: tagged first_attack as the first missile hits on merchant ships; Galaxy Leader (row 14) was the campaign's first attack overall.
+  - Row 16: "escalate" wording is AP's, plus the Maersk and Hapag-Lloyd pause.
+  - Row 25: "significant escalation" is an analyst quote in AFP coverage, not a government statement.
+  - Row 31: Bloomberg calls it escalating and says it was Iran's first attack on the UAE "in almost a month", which is under 30 days, so after_30_day_lull is not claimed.
+  - Row 33: the lull counts Red Sea proper only. Gulf of Aden skiff attacks in June 2026 (UKMTO 069-26 to 071-26) look like piracy and were not counted.
+  - Row 38: the Houthis claimed a strike on tanker NCC Wafa off Yanbu on 5 August (Windward), but no UKMTO warning was found for it.
+- Route fit doubtful: row 10 (Arabian Sea off Masirah), rows 19 and 23 (Gulf of Aden), rows 6, 12, 13, 36 are Saudi Red Sea coast facilities filed as gulf_facility (Gulf-state facility, not Persian Gulf).
+- Mirror or secondary URLs only, no original found: rows 2, 5, 6, 7, 8, 9, 11, 12, 13, 25, 26, 27, 28, 31, 36.
+- Dropped from the earlier version because they meet no escalation_reason: US-UK strikes on Yemen 2024-01-12 (a response, not an attack), Sounion 2024-08-21, and Hormuz attacks of 2026-10-05 (UKMTO 156-26), 2026-10-07 (158-26, casualties not confirmed as deaths) and 2026-10-22 (181-26).
+- Checked and left out:
+  - Abu Dhabi missile interception 2022-01-24: targeted Al Dhafra air base, not energy.
+  - Riyadh refinery drone 2022-03-10, 04:40 local: same refinery hit in March 2021.
+  - Marlin Luanda 2024-01-26, 7:45 p.m. Sanaa time (CENTCOM): no criterion met.
+  - UKMTO 036-25 (2025-10-18, 116NM east of Aden) and 043-25 (2025-12-05, small craft fire west of Yemen): attribution unclear.
+  - UKMTO 110-26 (2026-08-11, casualties off Al Mokha): time TBC, deaths not confirmed.
+  - Sep to Oct 2026 Hormuz attacks: about 40 UKMTO warnings, only 126-26 met a criterion. Attacks off Al Jubayl (174-26, 175-26) and Al Faw (131-26, 180-26) follow earlier 2026 hits in Saudi and Iraqi waters (016-26, 021-26, 063-26).
+- Not covered: 2020 Houthi claims before November that Saudi Arabia did not confirm (e.g. Jizan, January 2020), and Red Sea events between the 2023 campaign start and July 2025 beyond the rows above.
+- Escalation labels and reasons are the compiler's judgment, not a source's.
+- Confounding: rows 24 onward sit inside the war that began 2026-02-28, and rows 33 onward overlap the Houthi blockade of Saudi Arabia declared 2026-07-20.
