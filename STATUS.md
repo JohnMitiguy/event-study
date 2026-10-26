@@ -4,6 +4,8 @@ Last updated: 2026-10-26 (end of session)
 
 ## Where we are
 
+- **v1.0.0 released 26 Oct 2026** (tag on 3ad1bed): https://github.com/JohnMitiguy/event-study/releases/tag/v1.0.0. Repo is public, with description, topics, social preview and MIT license.
+
 - **First full run done** on the 37 events (main, `--shift-assumed`, `--official-time`), all 37 ok, 0 failed, prices through 2026-10-15. Rerun on the clean commit fcd40e8: every `opec_run_info*.json` says `git_dirty: false`, and all results CSVs and charts came out byte-for-byte identical to the first run.
 - Headline (cross-sectional t, [-1,+1]): cuts N 7, +1.51%, t 1.56; increases N 17, -0.51%, t -0.49. Both null. Increases on [-5,+5]: -3.26%, t -2.38 (BMP -2.47, Wilcoxon p 0.045), t stays between -2.03 and -2.79 when any one event is dropped. Most of the cut move is before day 0 (+3.10% by day -1).
 - Shifted run (13 time_assumed rows): cuts [-1,+1] +0.80% (t 0.57), increases -0.82% (t -0.90), increases [-5,+5] -3.33% (t -2.42). Firm-only: cuts 3 (too few), increases N 14: -1.37% (t -1.34), [-5,+5] -4.55% (t -3.19). Official-time run identical to main (the one leak is the same day as its release). opec_2025_04_03 upgraded 26 Oct from time_assumed to 09:15 ET (Dow Jones, date-only rule) with surprise_flag 1 (Reuters "unexpectedly").

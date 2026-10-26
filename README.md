@@ -181,4 +181,4 @@ Text after a command is passed along as extra notes, for example `/review-last f
 
 ## Author
 
-John Mitiguy, B.A. Economics (Finance minor), UMass Lowell. Questions or comments: open an issue on this repository.
+John Mitiguy, B.A. Economics (Finance minor), UMass Lowell. [LinkedIn](https://www.linkedin.com/in/john-mitiguy/). Questions or comments: open an issue on this repository.
