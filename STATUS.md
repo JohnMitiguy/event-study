@@ -5,7 +5,7 @@ Last updated: 2026-10-27 (v1.1: OPEC+ runs mask attack windows)
 ## Where we are
 
 - **v1.0.0 released 26 Oct 2026** (tag on 3ad1bed): https://github.com/JohnMitiguy/event-study/releases/tag/v1.0.0. Repo is public. The GitHub description, topics and social preview still describe OPEC+ only (preview also says 414 tests and shows v1.0 numbers).
-- **v1.1 built and run 27 Oct, not yet committed or tagged.** All four runs were made on an uncommitted tree, so every run info says `git_dirty: true` at 08ac9ca. They need one clean rerun after the commit (see Next 1).
+- **v1.1 committed 27 Oct** (85e2cdc) and rerun clean (4228dba): every run info says `git_dirty: false` at 85e2cdc, every events and mask hash matches the committed file, and every results CSV and chart was byte-identical to the pre-commit run. CI passed on 4228dba. Tag v1.1.0 on 4228dba (local until pushed); release notes drafted.
 - Tests (27 Oct, v1.1): ruff clean, 461 passed, 2 skipped (reviewer-hook test: no bash found from pytest's shell).
 
 ### v1.1 changes
@@ -35,17 +35,16 @@ Last updated: 2026-10-27 (v1.1: OPEC+ runs mask attack windows)
 
 ## Next
 
-1. **Commit v1.1, then rerun clean (John):** commit everything, run the four studies again, check that `git status` shows only the 4 run info files changed (`git_dirty: false`), commit those, then tag v1.1.0.
-2. **DECISIONS.md (John):** stale lines 67, 69, 99, 115, plus new lines for the hash change, OPEC+ robustness flags, OPEC+ confound_note and reporting v1.1 (drafts given 27 Oct).
-3. **CLAUDE.md (John):** the estimation-window convention says masks come from "other events in the same run"; v1.1 OPEC+ runs also skip attack windows (draft given 27 Oct).
-4. **Events CSV edits (John):** attack confound_notes per the [-5,+5] Decision line (13 attacks; text drafted 27 Oct); remove "surprise" and change +8.73% to +8.80% in attack_2021_03_07's note; OPEC+ confound_notes for opec_2025_07_05 and opec_2026_03_01 (same day 0 as an attack). None changes a number.
-5. **events/dates_table.csv** is the v1.0 table (max span 197). A v1.1 version is in the 27 Oct scratchpad (`dates_table_v1.1.csv`, drop its `index` column); copy it over if you want it current.
-6. **Primary-source checks:** attack_2026_07_22 (16:00 ET exactly; any earlier report moves day 0 to Wed 22 Jul), attack_2026_03_18 (15:28 ET, 32 min before close; QNA 15:21 has no URL), attack_2019_07_19 (first public report before 16:00 ET?), attack_2019_05_12 (BIMCO time source not linked), mask_2026_08_04 and mask_2026_08_31 (report time vs incident time), mask_2026_07_26 (25 or 26 Jul).
-7. **GitHub (John):** description, topics, and a new social preview (needs a script or a hand-made image; current one is OPEC-only, v1.0 numbers, 414 tests).
-8. Source a confound_note check for the other large OPEC rows: opec_2020_12_03 (+9.25%), opec_2021_03_04 (+8.80%), opec_2026_04_05 ([-5,+5] -10.86%).
-9. OPEC sourcing: Al Jazeera 5 Dec 2019 time zone (opec_2019_12_05), A5 (6 or 7 Dec 2018), the opec_2022_10_05 11:00 official time, Sep 2016 Algiers releases (slugs 495, 496; inside opec_2016_12_10's estimation window, not masked), A14's table, 1B rows 2, 3, 6. Open call 5 (A2 on 24 or 25 May 2017).
-10. Saudi unilateral rows from Saudi Energy Ministry statements (5 Jan 2021 first; then remove mask_2021_01_05).
-11. Brent robustness check: confirm the calendar check covers a non-NYSE series first.
+1. **Push tag v1.1.0 and publish the GitHub release (John).** Then update the repo description and topics.
+2. **DECISIONS.md typo (John):** line 67 "before it;only" needs a space.
+3. **Events CSV edits (John), not done yet:** attack confound_notes per the [-5,+5] Decision line (13 attacks; text drafted 27 Oct); remove "surprise" and change +8.73% to +8.80% in attack_2021_03_07's note; OPEC+ confound_notes for opec_2025_07_05 and opec_2026_03_01 (same day 0 as an attack). None changes a number.
+4. **events/dates_table.csv** is the v1.0 table (max span 197). A v1.1 version is in the 27 Oct scratchpad (`dates_table_v1.1.csv`, drop its `index` column); copy it over if you want it current.
+5. **Primary-source checks:** attack_2026_07_22 (16:00 ET exactly; any earlier report moves day 0 to Wed 22 Jul), attack_2026_03_18 (15:28 ET, 32 min before close; QNA 15:21 has no URL), attack_2019_07_19 (first public report before 16:00 ET?), attack_2019_05_12 (BIMCO time source not linked), mask_2026_08_04 and mask_2026_08_31 (report time vs incident time), mask_2026_07_26 (25 or 26 Jul).
+6. **GitHub (John):** description, topics, and a new social preview (needs a script or a hand-made image; current one is OPEC-only, v1.0 numbers, 414 tests).
+7. Source a confound_note check for the other large OPEC rows: opec_2020_12_03 (+9.25%), opec_2021_03_04 (+8.80%), opec_2026_04_05 ([-5,+5] -10.86%).
+8. OPEC sourcing: Al Jazeera 5 Dec 2019 time zone (opec_2019_12_05), A5 (6 or 7 Dec 2018), the opec_2022_10_05 11:00 official time, Sep 2016 Algiers releases (slugs 495, 496; inside opec_2016_12_10's estimation window, not masked), A14's table, 1B rows 2, 3, 6. Open call 5 (A2 on 24 or 25 May 2017).
+9. Saudi unilateral rows from Saudi Energy Ministry statements (5 Jan 2021 first; then remove mask_2021_01_05).
+10. Brent robustness check: confirm the calendar check covers a non-NYSE series first.
 
 ## Not built yet
 

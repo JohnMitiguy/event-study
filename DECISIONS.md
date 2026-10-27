@@ -64,7 +64,7 @@ Decision: confound_note records only specific, dated, sourced items inside [-1,+
 
 Decision: A pause or delay of scheduled increases is tagged hold, even when the same release includes a small pre-announced increase. Reason: tagging it increase would pool a supply-tightening surprise with real loosening events and wash out the cut and increase tests.
 
-Decision: Failed events still mask other events' estimation windows; if day -10 is masked the window ends on the latest unmasked day before it;only earlier events mask later ones. Reason: the market reacted whether or not an event's own regression ran, and a later event cannot be known when an earlier one is estimated.
+Decision: Failed events still mask other events' estimation windows; if day -10 is masked the window ends on the latest unmasked day before it; only earlier events mask later ones. Reason: the market reacted whether or not an event's own regression ran, and a later event cannot be known when an earlier one is estimated.
 
 Decision: Each event's estimation window leaves out every trading day inside another event's widest configured event window (all other rows of the same events table, ok or failed; not their run-up days, not events outside the table) and reaches further back to keep est_length days. Reason: those days carry another event's reaction, which would inflate resid_std and bend alpha and beta, and a fixed est_length keeps every regression the same size.
 
