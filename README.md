@@ -24,6 +24,8 @@ CAR (cumulative abnormal return) is a security's return minus what SPY predicts,
 
 22 attacks on Gulf energy facilities, Red Sea shipping and the Strait of Hormuz from May 2019 to Aug 2026, measured on energy (XLE), defense (ITA) and gold (GLD).
 
+![XLE average cumulative abnormal return around supply-route attacks](charts/supply_route_caar_XLE.png)
+
 - **Headline: no significant effect.** On the attack day and the next (days 0 to +1), XLE averages +0.60% (t 1.02, p 0.32, N 22). The sign matches theory, but the average can't be told apart from zero.
 - **Nothing else survives a multiple-testing correction.** Of the five other security and window tests, XLE over days -5 to +5 comes closest (+2.27%, p 0.035), but its Holm-adjusted p is 0.18. Most of that move (+1.83%) comes before the attacks, so it isn't a reaction to them. ITA and GLD show nothing.
 - **One attack carries much of the average.** The Nov 2020 missile strike on Aramco's Jeddah plant (+9.84%) landed on the same days as the Oxford/AstraZeneca vaccine result and the start of the Biden transition. Without it, the other 21 attacks average +0.16%.
@@ -116,7 +118,7 @@ Fixed and logged before any returns were read (DECISIONS.md):
 
 ### Results
 
-First run, 27 Oct 2026, on a clean commit: all 22 attacks ran on all three securities (none failed), prices through 15 Oct 2026.
+First run, 27 Oct 2026, on a clean commit: all 22 attacks ran on all three securities (none failed), prices through 15 Oct 2026. The XLE chart is in [In 30 seconds](#in-30-seconds); ITA and GLD have their own in `charts/`.
 
 **Primary result: no significant effect.** XLE over [0,+1]: N 22, mean CAR +0.60%, t 1.02, p 0.32. The sign is the expected one and 15 of 22 attacks are positive, but the average can't be told apart from zero.
 

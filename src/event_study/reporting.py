@@ -27,7 +27,6 @@ import matplotlib
 matplotlib.use("Agg")
 import matplotlib.pyplot as plt
 import pandas as pd
-from matplotlib.ticker import PercentFormatter
 
 from event_study.aggregate import MIN_EVENTS, across_event_tests, excluded_events
 from event_study.prices import cache_path, dates_sha256, values_sha256
@@ -328,6 +327,18 @@ def wrap_caption(text: str, fig_width: float) -> str:
     return textwrap.fill(text, width=width)
 
 
+def percent_label(x: float, _pos=None) -> str:
+    """Y-axis label for a return: 0.025 -> "2.5%", 0.02 -> "2%", -0.005 -> "−0.5%".
+
+    Uses only the decimals the tick needs, so ticks 0.5% apart don't all
+    round to the same whole percent (PercentFormatter(decimals=0) labelled
+    0.5%, 1.0%, 1.5% and 2.0% as "0%, 1%, 2%, 2%"). ":g" also drops float
+    noise like 1.5000000000000002. "+ 0" turns -0.0 into 0.0, and "−"
+    (Unicode minus) matches the x-axis labels.
+    """
+    return f"{x * 100 + 0:g}%".replace("-", "−")
+
+
 def draw_panel(ax, event_id: str, day0: pd.Timestamp, abnormal: pd.Series) -> None:
     """Bars of one event's abnormal returns by event day, day 0 highlighted."""
     days = list(CHART_DAYS)
@@ -338,7 +349,7 @@ def draw_panel(ax, event_id: str, day0: pd.Timestamp, abnormal: pd.Series) -> No
     ax.set_xticks([days[0], 0, days[-1]])
     # "−" (Unicode minus) matches the minus sign matplotlib uses on the y-axis.
     ax.xaxis.set_major_formatter(lambda x, _: f"{x:+.0f}".replace("-", "−") if x != 0 else "0")
-    ax.yaxis.set_major_formatter(PercentFormatter(xmax=1, decimals=0))
+    ax.yaxis.set_major_formatter(percent_label)
     ax.tick_params(labelsize=8, colors=TEXT_SECONDARY)
     ax.grid(axis="y", color=GRID, linewidth=0.8)
     ax.set_axisbelow(True)
@@ -454,7 +465,7 @@ def draw_caar_chart(
     days = list(CHART_DAYS)
     ax.set_xticks(days)
     ax.xaxis.set_major_formatter(lambda x, _: f"{x:+.0f}".replace("-", "−") if x != 0 else "0")
-    ax.yaxis.set_major_formatter(PercentFormatter(xmax=1, decimals=0))
+    ax.yaxis.set_major_formatter(percent_label)
     ax.set_xlim(days[0] - 0.5, days[-1] + 3.5)  # room for the end labels
     ax.set_xlabel(xlabel, fontsize=9, color=TEXT_SECONDARY)
     ax.tick_params(labelsize=8, colors=TEXT_SECONDARY)

@@ -128,6 +128,8 @@ Decision: When a source gives several times for one attack, the earliest is the 
 
 Decision: Mask-only attacks with no time or with conflicting times are flagged time_assumed, so both the date and the next session are masked. Reason: masking one extra day costs a little estimation data, while missing the reaction day would bend the baseline.
 
+Decision: A confound_note may be added after a run, since no output reads it; the row's data and results stay as run, and the note says when it was added. Reason: notes explain results without changing them.
+
 ## Not built yet
 - Official-time robustness run (the --official-time flag exists, but the run has not been done)
 - Saudi unilateral subsample report
