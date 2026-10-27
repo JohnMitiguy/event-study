@@ -1,12 +1,20 @@
 # Status
 
-Last updated: 2026-10-27 (v1.1: OPEC+ runs mask attack windows)
+Last updated: 2026-10-27 (README rewrite with summary charts; results unchanged)
 
 ## Where we are
 
-- **v1.0.0 released 26 Oct 2026** (tag on 3ad1bed): https://github.com/JohnMitiguy/event-study/releases/tag/v1.0.0. Repo is public. The GitHub description, topics and social preview still describe OPEC+ only (preview also says 414 tests and shows v1.0 numbers).
+- **v1.0.0 released 26 Oct 2026** (tag on 3ad1bed): https://github.com/JohnMitiguy/event-study/releases/tag/v1.0.0. Repo is public. The GitHub description, topics and uploaded social preview still describe OPEC+ only (the uploaded preview also says 414 tests and shows v1.0 numbers); a regenerated `charts/social_preview.png` is ready to upload.
 - **v1.1 committed 27 Oct** (85e2cdc) and rerun clean (4228dba): every run info says `git_dirty: false` at 85e2cdc, every events and mask hash matches the committed file, and every results CSV and chart was byte-identical to the pre-commit run. CI passed on 4228dba. Tag v1.1.0 on 4228dba, pushed.
-- Tests (27 Oct, v1.1): ruff clean, 461 passed, 2 skipped (reviewer-hook test: no bash found from pytest's shell).
+- Confound notes committed (1ded4ef) and all four studies rerun clean on it (b5f0b17): only the run info files changed.
+- Tests (27 Oct, README rewrite): ruff clean, 466 passed, 2 skipped (reviewer-hook test: no bash found from pytest's shell).
+
+### README rewrite (27 Oct, not committed yet)
+
+- "In 30 seconds" and "What this is" replaced by a Summary: question, what was built, five key findings each with its strength, a labeled interpretation, and "Why the results hold up". Results sections shortened where they repeated it; Caveats and Limitations unchanged.
+- New descriptive checks quoted in the README (labeled descriptive, not pre-registered): cuts days 0 and +1 +1.13%, days 0 to +5 +0.29%; cut run-up median +1.18%, opec_2020_04_09 +9.14% and opec_2022_10_05 +9.74% carry most of it; increases -1.81% before day 0 and -1.01% after; without opec_2025_04_03, increases after day 0 -0.05%; 32 of 37 OPEC+ [-1,+1] intervals cross zero.
+- `scripts/readme_charts.py` (new) reads only results/*.csv and run info and draws `charts/where_the_move_happens.png`, `charts/opec_event_cars.png`, `charts/supply_route_event_cars.png` and `charts/social_preview.png` (both studies, v1.1 numbers, no test count). Functions in `reporting.py`: `split_car`, `car_interval`, `draw_move_timing(_chart)`, `draw_event_car_dots`, `draw_social_preview`, `signed`, `day_label`. 5 tests in `tests/test_reporting.py`. Reruns give byte-identical PNGs; results/, events/ and DECISIONS.md untouched.
+- Number check (scratchpad `check_readme_numbers.py`, 27 Oct session): 45 of 45 README figures match the CSVs.
 
 ### v1.1 changes
 
@@ -35,11 +43,11 @@ Last updated: 2026-10-27 (v1.1: OPEC+ runs mask attack windows)
 
 ## Next
 
-1. **README rewrite (new session):** more detail and charts up top; brief given to John 27 Oct, pasted into the new session.
-2. **Commit the confound notes, then rerun clean (John):** notes pasted 27 Oct (13 attacks, 5 OPEC+ increases, attack_2021_03_07 'surprise' removed and +8.80%); only confound_note changed. The events hashes in all 4 run info files are now stale: commit, rerun the four studies, check only the run info files change, commit.
+1. **Review and commit the README rewrite (John).** Then upload `charts/social_preview.png` under GitHub Settings > General > Social preview.
+2. Rerun `scripts/readme_charts.py` after any study rerun that changes results (it is not called by the run scripts).
 3. **events/dates_table.csv** is the v1.0 table (max span 197). A v1.1 version is in the 27 Oct scratchpad (`dates_table_v1.1.csv`, drop its `index` column); copy it over if you want it current.
 4. **Primary-source checks:** attack_2026_07_22 (16:00 ET exactly; any earlier report moves day 0 to Wed 22 Jul), attack_2026_03_18 (15:28 ET, 32 min before close; QNA 15:21 has no URL), attack_2019_07_19 (first public report before 16:00 ET?), attack_2019_05_12 (BIMCO time source not linked), mask_2026_08_04 and mask_2026_08_31 (report time vs incident time), mask_2026_07_26 (25 or 26 Jul).
-5. **GitHub (John):** description, topics, and a new social preview (needs a script or a hand-made image; current one is OPEC-only, v1.0 numbers, 414 tests).
+5. **GitHub (John):** description and topics still describe OPEC+ only. The new social preview image is ready (item 1).
 6. Source a confound_note check for the other large OPEC rows: opec_2020_12_03 (+9.25%), opec_2021_03_04 (+8.80%), opec_2026_04_05 ([-5,+5] -10.86%).
 7. OPEC sourcing: Al Jazeera 5 Dec 2019 time zone (opec_2019_12_05), A5 (6 or 7 Dec 2018), the opec_2022_10_05 11:00 official time, Sep 2016 Algiers releases (slugs 495, 496; inside opec_2016_12_10's estimation window, not masked), A14's table, 1B rows 2, 3, 6. Open call 5 (A2 on 24 or 25 May 2017).
 8. Saudi unilateral rows from Saudi Energy Ministry statements (5 Jan 2021 first; then remove mask_2021_01_05).

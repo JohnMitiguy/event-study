@@ -4,46 +4,48 @@
 ![Python 3.13](https://img.shields.io/badge/python-3.13-blue)
 [![License: MIT](https://img.shields.io/badge/license-MIT-green)](LICENSE)
 
-## In 30 seconds
+## Summary
 
-This project tests whether a sector moves more than the S&P 500 (SPY) would predict around geopolitical events, using a market-model event study. Two event types are done so far. Each one had its main test fixed and logged before its first run.
+**The question.** When OPEC+ changes oil production, or someone attacks the routes Gulf oil moves through, do energy, defense and gold stocks move more than the overall market would predict? For a trader or an analyst the timing matters as much as the size: if the move comes before the news is official, reacting to the headline is too late.
 
-CAR (cumulative abnormal return) is a security's return minus what SPY predicts, summed over the window. t is the t-statistic of the average across events.
+**What I built.** Two event studies in Python on one tested framework:
 
-### 1. OPEC+ production decisions
+- **37 OPEC+ production decisions** (Dec 2016 to Oct 2026), measured on the energy sector ETF (XLE). See [OPEC+ decisions](#opec-decisions).
+- **22 attacks on Gulf energy facilities, Red Sea shipping and the Strait of Hormuz** (May 2019 to Aug 2026), measured on energy (XLE), defense (ITA) and gold (GLD) ETFs. See [Supply-route attacks](#supply-route-attacks).
 
-37 decisions from Dec 2016 to Oct 2026, measured on the energy sector (XLE).
+Each security is compared with what the S&P 500 (SPY) predicts for it, from a market model fitted on the months before each event. The main test of each study was fixed and logged before its first run. Later event types are planned: terrorist attacks, tariffs and OFAC sanctions.
 
-![XLE average cumulative abnormal return around OPEC+ decisions](charts/opec_caar.png)
+Two terms used throughout. **CAR** (cumulative abnormal return) is a security's return minus what SPY predicts, summed over a window of trading days around the event; day 0 is the first day the market could react. **t** is the t-statistic of the average CAR across events: roughly 2 or more (in absolute value) is needed for significance at 5%, a bit more with few events. **p** is the chance of an average at least this far from zero if the events had no effect.
 
-- **Headline: no significant effect.** Over days -1 to +1, cuts average +1.51% (t 1.64, N 7) and increases -0.40% (t -0.38, N 17). The signs match theory, but neither is statistically different from zero.
-- **Increases drift down over a wider window, but only borderline.** Over days -5 to +5, increases average -2.82% (t -2.08, p 0.054), just short of significance at 5%. Across the robustness samples t is -2.06 to -2.90. It was not the pre-set headline window, and one of the 17 increases (3 Apr 2025) lands on the US tariff selloff, so treat it as suggestive.
-- **Most of the cut move comes before day 0.** By day -1, cuts are already up +3.10% on average (cumulated from day -5), consistent with decisions being anticipated or leaked before the official release.
+![Mean XLE abnormal return over days -5 to -1 and over days 0 to +5, for OPEC+ cuts, OPEC+ increases and supply-route attacks](charts/where_the_move_happens.png)
 
-### 2. Attacks on oil supply routes
+### Key findings
 
-22 attacks on Gulf energy facilities, Red Sea shipping and the Strait of Hormuz from May 2019 to Aug 2026, measured on energy (XLE), defense (ITA) and gold (GLD).
+1. **Most of XLE's move around OPEC+ decisions comes before the official news.** By the day before a cut is announced, XLE is already +3.10% ahead of what SPY predicts (summed from day -5). Days 0 and +1 add +1.13%, then most of that fades, so days 0 to +5 add only +0.29% net. Increases show the same pattern in reverse: -1.81% before day 0 and -1.01% from day 0 to +5. *Strength:* a descriptive split, not a pre-registered test, and the cut run-up rests on few events. Two of the 7 cuts (Apr 2020 +9.14%, Oct 2022 +9.74%) carry most of it, and the median cut is +1.18%.
+2. **Production increases come with a slow drift down in XLE, a borderline result.** Over days -5 to +5 the 17 increases average -2.82% (t -2.08, p 0.054), just short of 5% significance. Without the 3 increases whose announcement time is assumed, the other 14 average -4.10% (t -2.90). *Strength:* suggestive only. This was not the pre-set headline window, and the pre-set test (days -1 to +1) is null: cuts +1.51% (t 1.64, N 7), increases -0.40% (t -0.38, N 17). One increase (3 Apr 2025) lands on the US tariff selloff.
+3. **Attacks on supply routes barely move energy beyond the market.** On the attack day and the next (days 0 to +1), XLE averages +0.60% (t 1.02, p 0.32, N 22). The sign is the expected one, but the average can't be told apart from zero. One event carries much of it: without the Nov 2020 strike on Aramco's Jeddah plant, which landed on the same days as a vaccine and Biden-transition rally, the other 21 attacks average +0.16%. Direct hits on Gulf energy facilities show the largest average (+2.71%, N 6, t 1.66), which fits a hit on supply, but with 6 events it is not significant. *Strength:* the pre-registered primary test is a clear null.
+4. **XLE's wider-window rise around attacks comes before the attacks.** Over days -5 to +5 XLE is +2.27% (p 0.035), but adjusted for the five secondary tests (Holm) its p is 0.18, and +1.83% of it comes before day 0. Attacks are not scheduled, so that run-up can't be a reaction to them.
+5. **Defense (ITA) and gold (GLD) show nothing.** All four of their tests have a Holm-adjusted p of 1.00.
 
-![XLE average cumulative abnormal return around supply-route attacks](charts/supply_route_caar_XLE.png)
+**What this suggests (interpretation, not a tested result).** Scheduled supply news like OPEC+ decisions is largely priced in before the official release, through expectations and leaks, so by release day most of the average move has already happened. On average, one-off attacks move energy stocks little beyond the market. The one hint of a real reaction is direct hits on Gulf energy facilities, and there are too few of them to confirm it.
 
-- **Headline: no significant effect.** On the attack day and the next (days 0 to +1), XLE averages +0.60% (t 1.02, p 0.32, N 22). The sign matches theory, but the average can't be told apart from zero.
-- **Nothing else survives a multiple-testing correction.** Of the five other security and window tests, XLE over days -5 to +5 comes closest (+2.27%, p 0.035), but its Holm-adjusted p is 0.18. Most of that move (+1.83%) comes before the attacks, so it isn't a reaction to them. ITA and GLD show nothing.
-- **One attack carries much of the average.** The Nov 2020 missile strike on Aramco's Jeddah plant (+9.84%) landed on the same days as the Oxford/AstraZeneca vaccine result and the start of the Biden transition. Without it, the other 21 attacks average +0.16%.
+<p>
+<img src="charts/opec_caar.png" width="49%" alt="XLE average cumulative abnormal return around OPEC+ cuts and increases, days -5 to +5">
+<img src="charts/supply_route_caar_XLE.png" width="49%" alt="XLE average cumulative abnormal return around supply-route attacks, days -5 to +5">
+</p>
 
-**Rigor:** no look-ahead (each model is fitted only on days well before its event, skipping every other event's window), main tests fixed before the first run, Holm adjustment for the attack study's secondary tests, a frozen price snapshot with hashes and the git commit recorded for every run, 463 automated tests, robustness checks (shifted dates, official times, outlier exclusion, a pre-war sample), and null headlines reported as nulls.
+### Why the results hold up
 
-Full method, results and limitations below. Every methodology decision and its reason is logged in [DECISIONS.md](DECISIONS.md).
+- **Tests fixed in advance.** Each study's primary test was logged in [DECISIONS.md](DECISIONS.md) before its first run (for the attacks, before any returns were read), so a headline can't be the best of many tries.
+- **Multiple-testing correction.** The attack study's five secondary tests are Holm-adjusted.
+- **No look-ahead.** Each market model is fitted only on days ending 10 trading days before its event.
+- **Overlapping news is masked.** Estimation windows skip the days around every other event, including real news that is not tested (failed OPEC+ meetings, attacks too close to a counted one), and each study skips the other study's events.
+- **Reproducible.** Prices are a frozen snapshot, and every run records the hashes of the prices and events files and the git commit.
+- **Tested.** 468 automated tests run in CI, including a simulation checking that the test statistic doesn't flag effects on pure noise more often than it should.
+- **Robustness checks:** shifted dates, official instead of leak times, outlier exclusion, and a pre-war sample.
+- **Nulls are reported as nulls,** and every known confound is disclosed in the results, [Caveats](#caveats) and [Limitations](#limitations).
 
-## What this is
-
-This project asks a simple question: when a geopolitical event happens, does a stock or sector move more than you would have expected from the market alone? Two event types are done:
-
-- **OPEC+ production decisions**, measured on the energy sector (XLE ETF). See [OPEC+ decisions](#opec-decisions).
-- **Attacks on oil supply routes** (Gulf energy facilities, Red Sea shipping, the Strait of Hormuz), measured on energy (XLE), defense (ITA ETF) and gold (GLD ETF). See [Supply-route attacks](#supply-route-attacks).
-
-Every security is measured against the S&P 500 (SPY ETF). Later event types are planned: terrorist attacks, tariffs and OFAC sanctions.
-
-A finding of "no measurable effect" is a valid result here and gets reported as such.
+Every methodology decision and its reason is logged in [DECISIONS.md](DECISIONS.md).
 
 ## Method
 
@@ -63,7 +65,7 @@ CARs are then averaged across events and the average is tested: cross-sectional 
 
 ### Results
 
-v1.1 run, 27 Oct 2026: 37 OPEC+ decisions from Dec 2016 to Oct 2026, all 37 ran (none failed), prices through 15 Oct 2026. From v1.1 the estimation windows also skip every supply-route attack, so the numbers differ slightly from v1.0.0 (see [What changed in v1.1](#what-changed-in-v11)). Event time is the leak time where there is one (one event), otherwise the announcement. The chart is in [In 30 seconds](#in-30-seconds).
+v1.1 run, 27 Oct 2026: 37 OPEC+ decisions from Dec 2016 to Oct 2026, all 37 ran (none failed), prices through 15 Oct 2026. From v1.1 the estimation windows also skip every supply-route attack, so the numbers differ slightly from v1.0.0 (see [What changed in v1.1](#what-changed-in-v11)). Event time is the leak time where there is one (one event), otherwise the announcement. The average-CAR chart is in the [Summary](#summary).
 
 | Group | N | Mean CAR [-1,+1] | t | Mean CAR [-5,+5] | t |
 |---|---|---|---|---|---|
@@ -73,11 +75,13 @@ v1.1 run, 27 Oct 2026: 37 OPEC+ decisions from Dec 2016 to Oct 2026, all 37 ran 
 
 t is the cross-sectional t-test. The headline is the [-1,+1] column for cuts and increases.
 
+![Each OPEC+ decision's XLE CAR over days -1 to +1 with a 95% interval, grouped into cuts, increases and holds](charts/opec_event_cars.png)
+
 **What it says.**
 
-- **The headline is a null result.** XLE moves the way theory says (up after cuts, down after increases), but neither [-1,+1] average is statistically different from zero. With only 7 cuts, a test at 5% would need a much larger average reaction to register.
-- **Increases show a slower drift, but only borderline.** Over [-5,+5] the 17 increases average -2.82% (t -2.08, p 0.054; BMP t -2.19; Wilcoxon p 0.080). Dropping any single event gives t between -1.72 and -2.51, so the result depends on which events are in. This window was not the headline, so treat it as suggestive at most, not as the finding.
-- **Much of the move comes before day 0.** By day -1, cuts are already up +3.10% on average and increases down -1.81%. That fits decisions being reported or expected days before the official release. The 10-day gap before the estimation window keeps this run-up out of the baseline.
+- **The headline is a null result.** XLE moves the way theory says (up after cuts, down after increases), but neither [-1,+1] average is statistically different from zero. With only 7 cuts, a test at 5% would need a much larger average reaction to register. The chart shows why: most single-event intervals cross zero, and a few events far from the rest (3 Apr 2025, 3 Dec 2020, 4 Mar 2021) move the averages.
+- **Increases over [-5,+5] are borderline.** -2.82% (t -2.08, p 0.054; BMP t -2.19; Wilcoxon p 0.080). Dropping any single event gives t between -1.72 and -2.51, so the result depends on which events are in. This window was not the headline, so treat it as suggestive at most, not as the finding.
+- **Much of the move comes before day 0.** By day -1, cuts are up +3.10% on average (median +1.18%; opec_2020_04_09 +9.14% and opec_2022_10_05 +9.74% carry most of it) and increases down -1.81%. From day 0 to +5, cuts add +0.29% and increases -1.01%; without opec_2025_04_03, the other 16 increases add -0.05%. That fits decisions being reported or expected days before the official release. The 10-day gap before the estimation window keeps this run-up out of the baseline. These before and after splits are descriptive checks, not pre-registered tests.
 
 **Robustness.**
 
@@ -90,7 +94,7 @@ t is the cross-sectional t-test. The headline is the [-1,+1] column for cuts and
 
 **Attacks inside OPEC+ windows.** 12 OPEC+ events have a supply-route attack (counted or masked) whose day 0 falls in their [-5,+5], 8 of them increases, and 5 of those have one in [-1,+1] (Jul 2025, Mar, May, Jul and Aug 2026). Attack days are skipped in estimation, never inside event windows, and an attack should lift XLE, so these work against the expected sign for increases. Without those 8, the other 9 increases average -4.85% on [-5,+5] (t -2.35). This is a descriptive check, not a pre-registered test.
 
-Outputs: `results/opec_results.csv` (per event), `results/opec_across_event.csv` (group tests for all three samples: all events, without assumed times, without outlier-fitted events), `results/opec_abnormal.csv` (daily abnormal returns), `charts/opec_events.png` (one panel per event). The robustness runs write the same files with `_day0_shifted` or `_official_time` added. `results/opec_run_info.json` records the data hashes, settings and git commit of each run.
+Outputs: `results/opec_results.csv` (per event), `results/opec_across_event.csv` (group tests for all three samples: all events, without assumed times, without outlier-fitted events), `results/opec_abnormal.csv` (daily abnormal returns), `charts/opec_events.png` (one panel per event). The robustness runs write the same files with `_day0_shifted` or `_official_time` added. `results/opec_run_info.json` records the data hashes, settings and git commit of each run. `scripts/readme_charts.py` draws `charts/opec_event_cars.png` (each event's [-1,+1] CAR) and `charts/where_the_move_happens.png` (before and from day 0, shared with the attack study) from the main run's CSVs.
 
 ### What changed in v1.1
 
@@ -127,7 +131,7 @@ Fixed and logged before any returns were read (DECISIONS.md):
 
 ### Results
 
-First run, 27 Oct 2026, on a clean commit: all 22 attacks ran on all three securities (none failed), prices through 15 Oct 2026. The XLE chart is in [In 30 seconds](#in-30-seconds); ITA and GLD have their own in `charts/`.
+First run, 27 Oct 2026, on a clean commit: all 22 attacks ran on all three securities (none failed), prices through 15 Oct 2026. The XLE average-CAR chart is in the [Summary](#summary); ITA and GLD are below.
 
 **Primary result: no significant effect.** XLE over [0,+1]: N 22, mean CAR +0.60%, t 1.02, p 0.32. The sign is the expected one and 15 of 22 attacks are positive, but the average can't be told apart from zero.
 
@@ -142,12 +146,19 @@ First run, 27 Oct 2026, on a clean commit: all 22 attacks ran on all three secur
 
 t is the cross-sectional t-test and p is its unadjusted two-sided p-value. Holm p adjusts the five secondary rows together.
 
+![Each attack's XLE CAR over days 0 to +1 with a 95% interval, grouped by route](charts/supply_route_event_cars.png)
+
 **What it says.**
 
 - **The primary test is a null.** XLE moves the expected way, but not by enough to be distinguishable from zero. One event carries much of the mean (see [Largest single event](#largest-single-event)). Without it, the other 21 average +0.16%.
 - **No secondary test survives Holm.** XLE over [-5,+5] comes closest (+2.27%, p 0.035, BMP t 2.39, Wilcoxon p 0.030), but adjusted for five tests its p is 0.18. Dropping any one event keeps t between 1.93 and 2.88.
 - **The [-5,+5] move is mostly before the attacks.** Days -5 to -1 average +1.83%, and days 0 to +5 add only +0.44%. Unlike OPEC+ meetings, attacks are not scheduled, so a run-up before day 0 can't be a reaction to them. The biggest pre-attack moves belong to attack_2021_03_07 (+9.00%, an OPEC+ decision two sessions earlier) and attack_2020_11_23 (+8.40%).
 - **ITA and GLD show nothing**, on either window.
+
+<p>
+<img src="charts/supply_route_caar_ITA.png" width="49%" alt="ITA average cumulative abnormal return around supply-route attacks, days -5 to +5">
+<img src="charts/supply_route_caar_GLD.png" width="49%" alt="GLD average cumulative abnormal return around supply-route attacks, days -5 to +5">
+</p>
 
 The leave-one-out, without-one-event and before-day-0 numbers are descriptive checks run after the results, not pre-registered tests.
 
@@ -163,7 +174,7 @@ The leave-one-out, without-one-event and before-day-0 numbers are descriptive ch
 | first_attack | 5 | +1.11% | 1.87 |
 | named_escalation | 17 | +0.45% | 0.60 |
 
-Attacks on Gulf energy facilities show the largest average, which fits a direct hit on supply, but with 6 events it is not significant. Across all 30 subgroup tests (5 groups, 2 windows, 3 securities), three have a t above 2 in absolute value: GLD red_sea [-5,+5] +2.73% (t 3.10), GLD hormuz [0,+1] -1.72% (t -2.17) and XLE gulf_facility [-5,+5] +6.13% (t 2.05). Out of 30 tests, a few like this are expected by chance. In the pre-war sample, hormuz and first_attack have 3 events each and are not tested.
+Attacks on Gulf energy facilities show the largest average, which fits a direct hit on supply, but with 6 events it is not significant. The per-attack chart above shows the same breakdown event by event. Across all 30 subgroup tests (5 groups, 2 windows, 3 securities), three have a t above 2 in absolute value: GLD red_sea [-5,+5] +2.73% (t 3.10), GLD hormuz [0,+1] -1.72% (t -2.17) and XLE gulf_facility [-5,+5] +6.13% (t 2.05). Out of 30 tests, a few like this are expected by chance. In the pre-war sample, hormuz and first_attack have 3 events each and are not tested.
 
 **Excluded events.** None of the 22 failed or was dropped from any test. The 17 masked attacks are listed under [Masked attacks](#masked-attacks).
 
@@ -184,7 +195,7 @@ On 23 Nov 2020 a Houthi missile hit a fuel tank at Aramco's North Jeddah bulk pl
 - **The 2026 attacks are inside the war**, and the last two came after the Houthis declared a blockade of Saudi Arabia on 20 Jul 2026. The tests assume events are independent, and attacks within one war may not be.
 - **Attacks are not the only supply news.** Only attacks and OPEC+ news are masked in estimation. Sanctions, outages and other supply news are not.
 
-Outputs: `results/supply_route_results.csv` (per event and security), `results/supply_route_across_event.csv` (group tests, `all` and `pre_war` samples), `results/supply_route_abnormal.csv` (daily abnormal returns), `results/supply_route_run_info.json` (data hashes, settings and git commit), and per security `charts/supply_route_events_{XLE,ITA,GLD}.png` (one panel per attack) and `charts/supply_route_caar_{XLE,ITA,GLD}.png` (average CAR).
+Outputs: `results/supply_route_results.csv` (per event and security), `results/supply_route_across_event.csv` (group tests, `all` and `pre_war` samples), `results/supply_route_abnormal.csv` (daily abnormal returns), `results/supply_route_run_info.json` (data hashes, settings and git commit), and per security `charts/supply_route_events_{XLE,ITA,GLD}.png` (one panel per attack) and `charts/supply_route_caar_{XLE,ITA,GLD}.png` (average CAR), plus `charts/supply_route_event_cars.png` (each attack's XLE [0,+1] CAR, drawn by `scripts/readme_charts.py`).
 
 ## Limitations
 
@@ -213,6 +224,7 @@ uv run python scripts/run_opec.py --shift-assumed   # robustness check: day 0 of
 uv run python scripts/run_opec.py --dates-only      # where each estimation window falls; no returns or CARs
 uv run python scripts/run_supply_route.py               # run the supply-route attack study (XLE, ITA, GLD)
 uv run python scripts/run_supply_route.py --dates-only  # where each attack's estimation window falls; no returns
+uv run python scripts/readme_charts.py                  # redraw the Summary and per-event charts from results/ (reads no prices)
 ```
 
 `--shift-assumed` writes to `*_day0_shifted` files in the same way.
@@ -226,7 +238,7 @@ The first run of `run_opec.py` downloads prices from Yahoo Finance into `data/pr
 ```
 src/event_study/   the library: prices, events loader, trading-day logic, windows, market model, runner, reporting
 tests/             pytest tests (no network, no price cache needed)
-scripts/           run_opec.py and run_supply_route.py (the studies), plus demos, the null calibration and a price chart
+scripts/           run_opec.py and run_supply_route.py (the studies), readme_charts.py (summary charts and the social preview), plus demos, the null calibration and a price chart
 events/            the hand-filled events CSVs, the mask-only lists and the candidate lists
 results/           output CSVs and run info from the last runs
 charts/            saved charts

@@ -58,9 +58,19 @@ CAPTION_LINE_HEIGHT_IN = 1.3 * CAPTION_FONTSIZE / 72
 # by the script (they depend on its groups).
 DAY0 = "#2a78d6"
 OTHER_DAYS = "#c3c2b7"
+TEXT_PRIMARY = "#0b0b0b"
 TEXT_SECONDARY = "#52514e"
 GRID = "#e6e5e0"
 BASELINE = "#c3c2b7"
+# The before/after day 0 chart: days before day 0 take the highlight color,
+# days from day 0 on a muted gray (darker than OTHER_DAYS, so a column still
+# stands out against the white background).
+BEFORE_DAY0 = DAY0
+FROM_DAY0 = "#898781"
+
+# Two-sided 95% point of the standard normal, for per-event intervals. The
+# per-event t was calibrated against +/-1.96 (DECISIONS.md).
+Z_95 = 1.96
 
 
 def common_dates(a: pd.Series, b: pd.Series, names: tuple[str, str]) -> tuple[pd.Series, pd.Series]:
@@ -498,4 +508,252 @@ def draw_caar_chart(
     fig.tight_layout(rect=(0, 0.08, 1, 1))
     path.parent.mkdir(parents=True, exist_ok=True)
     fig.savefig(path, dpi=150)
+    print(f"Saved {path}")
+
+
+def signed(value: float, decimals: int = 2) -> str:
+    """A return as signed percent text: 0.031 -> "+3.10%", -0.0282 -> "−2.82%".
+
+    "−" (Unicode minus) matches the axis labels (see percent_label).
+    """
+    return f"{value:+.{decimals}%}".replace("-", "−")
+
+
+def day_label(day: int) -> str:
+    """An event day as axis text: -5 -> "−5", 0 -> "0", 5 -> "+5"."""
+    return f"{day:+d}".replace("-", "−") if day != 0 else "0"
+
+
+def split_car(abnormal: pd.DataFrame) -> tuple[float, float]:
+    """(mean CAR over the days before day 0, mean CAR from day 0 on).
+
+    abnormal: one row per event, "ok" events only, one column per event day
+    (ints, or strings like "-5" as read back from the abnormal CSVs). Each
+    event's abnormal returns are summed over the days before 0 and over day 0
+    and after, and each sum is averaged across events. The two add up to the
+    mean CAR over every column (days -5 to +5 by default).
+
+    A descriptive split, not a test: nothing here says whether either part
+    differs from zero.
+    """
+    days = abnormal.columns.astype(int)
+    before = abnormal.loc[:, days < 0].sum(axis=1).mean()
+    after = abnormal.loc[:, days >= 0].sum(axis=1).mean()
+    return float(before), float(after)
+
+
+def car_interval(rows: pd.DataFrame, window: tuple[int, int], z: float = Z_95) -> pd.DataFrame:
+    """Each event's CAR over window, with an interval of z standard errors.
+
+    rows: rows of a results table, "ok" rows only. The standard error is
+    resid_std times the square root of the window length, the one the
+    per-event t divides by (market_model.car_test). Like that t, it treats
+    the fitted alpha and beta as exact, so the interval is slightly too
+    narrow. Returns columns event_id, car, low and high, in the order of rows.
+    """
+    length = window[1] - window[0] + 1
+    se = rows["resid_std"] * math.sqrt(length)
+    car = rows[car_column(window)]
+    return pd.DataFrame(
+        {"event_id": rows["event_id"], "car": car, "low": car - z * se, "high": car + z * se}
+    )
+
+
+def _style_axis(ax, value_axis: str) -> None:
+    """Shared look: muted ticks, hairline grid on value_axis ("x" or "y"), no box."""
+    ax.tick_params(labelsize=8, colors=TEXT_SECONDARY)
+    ax.grid(axis=value_axis, color=GRID, linewidth=0.8)
+    ax.set_axisbelow(True)
+    ax.spines[["top", "right"]].set_visible(False)
+
+
+def draw_move_timing(ax, groups: dict[str, pd.DataFrame], fontsize: float = 8) -> None:
+    """Two columns per group: mean CAR before day 0 and from day 0 on.
+
+    groups: {label under the pair: that group's abnormal rows, "ok" events
+    only}, drawn left to right. The values come from split_car. Every column
+    carries its value; the text under each pair adds N and the whole-window
+    mean CAR (the two columns added up).
+    """
+    width = 0.36
+    for i, (label, abnormal) in enumerate(groups.items()):
+        days = abnormal.columns.astype(int)
+        first, last = int(days.min()), int(days.max())
+        before, after = split_car(abnormal)
+        parts = (
+            (-width / 2, before, BEFORE_DAY0, f"Days {day_label(first)} to −1"),
+            (width / 2, after, FROM_DAY0, f"Days 0 to {day_label(last)}"),
+        )
+        for offset, value, color, legend in parts:
+            # Only the first pair's columns name the legend entries.
+            ax.bar(i + offset, value, width=width * 0.9, color=color, label=legend if i == 0 else None)
+            above = value >= 0
+            ax.annotate(
+                signed(value),
+                (i + offset, value),
+                xytext=(0, 3 if above else -3),
+                textcoords="offset points",
+                ha="center",
+                va="bottom" if above else "top",
+                fontsize=fontsize,
+                color=TEXT_PRIMARY,
+            )
+        whole = f"[{day_label(first)},{day_label(last)}]"
+        # Under the pair, below the plot: xycoords mixes data x with axes y.
+        under = ax.annotate(
+            f"{label}\nN = {len(abnormal)}\n{whole} {signed(before + after)}",
+            (i, 0),
+            xycoords=("data", "axes fraction"),
+            xytext=(0, -6),
+            textcoords="offset points",
+            ha="center",
+            va="top",
+            fontsize=fontsize,
+            color=TEXT_SECONDARY,
+        )
+        # tight_layout misjudges text placed partly in axes coordinates, so it
+        # ignores this one; the figure leaves room for it instead.
+        under.set_in_layout(False)
+    ax.axhline(0, color=BASELINE, linewidth=1)
+    ax.set_xticks([])
+    ax.set_xlim(-0.6, len(groups) - 0.4)
+    ax.margins(y=0.18)  # room for the value labels
+    ax.yaxis.set_major_formatter(percent_label)
+    _style_axis(ax, "y")
+    ax.tick_params(labelsize=fontsize)
+    ax.spines["bottom"].set_visible(False)
+    ax.legend(frameon=False, fontsize=fontsize, loc="upper right")
+
+
+def _save_with_caption(fig, path: Path, caption: str, bottom_extra_in: float = 0.0) -> None:
+    """Wrap caption across the bottom of fig, fit the plot above it, save at 150 dpi.
+
+    tight_layout leaves room for the suptitle by itself (matplotlib 3.3 and
+    later), so nothing is reserved at the top. bottom_extra_in adds space
+    between the plot and the caption, for text drawn under the plot that
+    tight_layout is told to ignore.
+    """
+    fig_width, fig_height = fig.get_size_inches()
+    caption = wrap_caption(caption, fig_width)
+    # va="bottom": the caption's last line sits on y = 0.01 and extra lines go up.
+    fig.text(0.01, 0.01, caption, fontsize=CAPTION_FONTSIZE, color=TEXT_SECONDARY, va="bottom")
+    n_lines = caption.count("\n") + 1
+    bottom = (n_lines * CAPTION_LINE_HEIGHT_IN + 0.15 + bottom_extra_in) / fig_height
+    fig.tight_layout(rect=(0, bottom, 1, 1))
+    path.parent.mkdir(parents=True, exist_ok=True)
+    fig.savefig(path, dpi=150)
+    plt.close(fig)
+    print(f"Saved {path}")
+
+
+def draw_move_timing_chart(
+    groups: dict[str, pd.DataFrame], path: Path, *, title: str, caption: str
+) -> None:
+    """draw_move_timing on its own figure, with a title and a caption; saved to path."""
+    fig, ax = plt.subplots(figsize=(7, 4.4))
+    draw_move_timing(ax, groups)
+    fig.suptitle(title, fontsize=11, x=0.01, ha="left")
+    # The three lines under each pair of columns take about half an inch.
+    _save_with_caption(fig, path, caption, bottom_extra_in=0.55)
+
+
+def draw_event_car_dots(
+    results: pd.DataFrame,
+    path: Path,
+    *,
+    window: tuple[int, int],
+    group_column: str,
+    group_labels: dict[str, str],
+    colors: dict[str, str],
+    title: str,
+    xlabel: str,
+    caption: str,
+) -> None:
+    """One row per event: its CAR over window as a dot with a 95% interval.
+
+    Only "ok" rows of results are drawn. Events are grouped by group_column,
+    one block per key of group_labels in that order, under a heading with
+    that key's text (the script writes N, mean and t into it). Inside a block
+    events run from the largest CAR down, and a thin vertical line marks the
+    block's mean CAR. A key with no "ok" row is left out. Each row is named by
+    the date in its event_id ("opec_2025_04_03" -> "2025-04-03").
+
+    The interval comes from car_interval, so it shares the per-event t's
+    assumptions.
+    """
+    ran = results[results["status"] == "ok"]
+    blocks = [(key, ran[ran[group_column] == key]) for key in group_labels]
+    blocks = [(key, rows) for key, rows in blocks if not rows.empty]
+    n_rows = sum(len(rows) for _, rows in blocks) + 2 * len(blocks)
+    fig, ax = plt.subplots(figsize=(7, 0.2 * n_rows + 1.6))
+
+    y = 0.0
+    ticks, tick_labels = [], []
+    for key, rows in blocks:
+        color = colors[key]
+        # The heading sits on its own row, at the left edge of the plot. It is
+        # inside the axes, so tight_layout can ignore it (see draw_move_timing).
+        heading = ax.annotate(
+            group_labels[key],
+            (0, y),
+            xycoords=("axes fraction", "data"),
+            va="center",
+            fontsize=8.5,
+            fontweight="bold",
+            color=TEXT_PRIMARY,
+        )
+        heading.set_in_layout(False)
+        interval = car_interval(rows, window).sort_values("car", ascending=False)
+        first_y = y - 1
+        for _, event in interval.iterrows():
+            y -= 1
+            ax.plot([event["low"], event["high"]], [y, y], color=color, linewidth=1.5, zorder=2)
+            # A white ring keeps the dot readable where it sits on its bar.
+            ax.plot(event["car"], y, "o", color=color, markersize=6, markeredgecolor="white",
+                    markeredgewidth=1, zorder=3)  # fmt: skip
+            ticks.append(y)
+            tick_labels.append(event["event_id"].split("_", 1)[1].replace("_", "-"))
+        mean = interval["car"].mean()
+        ax.plot([mean, mean], [first_y + 0.5, y - 0.5], color=color, linewidth=1, zorder=1)
+        y -= 2  # a blank row, then the next heading
+
+    ax.axvline(0, color=BASELINE, linewidth=1, zorder=0)
+    ax.set_yticks(ticks, tick_labels)
+    ax.set_ylim(y + 1.5, 0.6)
+    ax.xaxis.set_major_formatter(percent_label)
+    ax.set_xlabel(xlabel, fontsize=9, color=TEXT_SECONDARY)
+    _style_axis(ax, "x")
+    ax.tick_params(axis="y", labelsize=7, length=0)
+    ax.spines["left"].set_visible(False)
+    fig.suptitle(title, fontsize=11, x=0.01, ha="left")
+    _save_with_caption(fig, path, caption)
+
+
+def draw_social_preview(
+    groups: dict[str, pd.DataFrame],
+    path: Path,
+    *,
+    title: str,
+    subtitle: str,
+    footer: str,
+    url: str,
+    chart_title: str,
+) -> None:
+    """The 1280 x 640 image GitHub shows when the repository link is shared.
+
+    Text on the left (title, subtitle, footer, url) and draw_move_timing on
+    the right with groups. GitHub does not read it from the repository: it
+    is uploaded by hand under Settings > General > Social preview.
+    """
+    fig = plt.figure(figsize=(12.8, 6.4), dpi=100)
+    fig.text(0.06, 0.80, title, fontsize=30, fontweight="bold", color=TEXT_PRIMARY, va="top")
+    fig.text(0.06, 0.52, subtitle, fontsize=15, color=TEXT_SECONDARY, va="top", linespacing=1.6)
+    fig.text(0.06, 0.12, footer, fontsize=12, color=TEXT_SECONDARY)
+    fig.text(0.06, 0.06, url, fontsize=12, color=TEXT_PRIMARY)
+    ax = fig.add_axes((0.60, 0.30, 0.37, 0.54))
+    draw_move_timing(ax, groups, fontsize=10)
+    ax.set_title(chart_title, fontsize=12, loc="left", color=TEXT_PRIMARY)
+    path.parent.mkdir(parents=True, exist_ok=True)
+    fig.savefig(path, dpi=100)
+    plt.close(fig)
     print(f"Saved {path}")
