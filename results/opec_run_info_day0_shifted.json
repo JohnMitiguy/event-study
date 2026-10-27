@@ -49,6 +49,6 @@
   "attack_mask_day0_count": 40,
   "yfinance_version": "1.7.0",
   "pandas_version": "3.0.6",
-  "git_commit": "08ac9ca2d18c754d50bd763275f8f176cad059c8",
-  "git_dirty": true
+  "git_commit": "85e2cdc46b5b5c142bc78d258bf4c8e732ea26fe",
+  "git_dirty": false
 }
