@@ -1,6 +1,6 @@
 # Status
 
-Last updated: 2026-10-27 (supply-route rows entered, pre-war sample built)
+Last updated: 2026-10-27 (first supply-route run, README section drafted)
 
 ## Where we are
 
@@ -14,7 +14,17 @@ Last updated: 2026-10-27 (supply-route rows entered, pre-war sample built)
 - README now has a Results section, the average-CAR chart (`charts/opec_caar.png`), a filled Excluded events table, and fixes for the stale lines found in the 21 Oct audit.
 - Tests (27 Oct): ruff clean, 445 passed.
 
-## Supply-route attacks (second event type, built 26 Oct 2026, events entered 27 Oct, not run yet)
+## Supply-route attacks (second event type, built 26 Oct 2026, events entered 27 Oct, first run 27 Oct)
+
+- **First run 27 Oct 2026** on clean commit 37a0ce4 (`supply_route_run_info.json`: `git_dirty: false`). 22 events, 22 ok on XLE, ITA and GLD, 0 failed, 79 mask day 0s. Prices: XLE/SPY through 2026-10-15 (OPEC+ snapshot), ITA/GLD cached through 2026-10-26, trimmed to shared dates.
+- **Primary (XLE [0,+1], all): N 22, +0.60%, t 1.02, p 0.321. Null.** Secondary, Holm p: XLE [-5,+5] +2.27% (t 2.25, p 0.035, Holm 0.177); ITA [0,+1] +0.30% (t 0.86), ITA [-5,+5] -0.46% (t -0.50), GLD [0,+1] -0.55% (t -1.06), GLD [-5,+5] +0.14% (t 0.14), all Holm 1.000.
+- Pre-war (N 16): XLE [0,+1] +0.86% (t 1.11), [-5,+5] +2.52% (t 1.94); nothing significant. hormuz and first_attack have N 3 there.
+- Betas: XLE median 0.82 before 2026 but 0.02 to 0.29 for the 2026 rows (OPEC+ 2026 betas fall the same way, to -0.29); ITA 0.63 to 1.14; GLD median -0.03 before 2026, 0.13 to 0.52 in 2026.
+- Biggest XLE [0,+1]: attack_2020_11_23 +9.84% (t 3.19); without it +0.16% (scratchpad, not pre-registered). XLE [-5,+5] is mostly pre-attack: days -5 to -1 average +1.83%, days 0 to +5 add +0.44% (biggest pre-attack: attack_2021_03_07 +9.00%, attack_2020_11_23 +8.40%).
+- confound_note for attack_2020_11_23 added after the run at John's request (vaccine and transition rally; AstraZeneca release, Fox Business, CBS and Reuters/BOE Report, all fetched 27 Oct). No output reads confound_note, so no number changes, but the events file hash no longer matches `supply_route_run_info.json`. Commit the run outputs before the CSV change so each commit is consistent.
+- README restructured for two event types: new title, "In 30 seconds" split by event type, shared Method, an "OPEC+ decisions" section, and a full "Supply-route attacks" section (definition, design, results, subgroups, largest event, caveats), a supply-route events CSV table and a masked-attacks table. Test count 414 -> 445.
+- Chart bug, not fixed: `reporting.py` lines 341 and 457 use `PercentFormatter(decimals=0)`, so `charts/supply_route_caar_XLE.png` labels its y-axis 2%, 2%, 2%, 1%, 0%, 0%. The chart is left out of the README until it's fixed. A fix changes the shared chart code (the OPEC+ charts too), so it needs John's OK and a clean rerun of both studies.
+- Tests (27 Oct): ruff clean, 443 passed, 2 skipped (reviewer-hook test: no bash found from pytest's shell).
 
 - Plan approved and decisions committed (560b69d): XLE primary, ITA and GLD secondary, all vs SPY, expected sign positive; primary test XLE [0,+1] cross-sectional t, all attacks pooled; windows [0,+1] and [-5,+5]; Holm p over the other five; two-sided; subgroups route and escalation; counted attacks at least 11 trading days apart; no time_assumed rows; attack runs mask all OPEC events and OPEC masks (main and shifted day 0); OPEC runs do not mask attacks until a v1.1.
 - Built: `src/event_study/reporting.py` (shared helpers moved out of run_opec.py), `group_columns` in the runner, `events.load_supply_route_events` (spacing check), `scripts/run_supply_route.py` (`--dates-only`; no `--refresh`, so the shared XLE/SPY cache is never replaced), header-only `events/supply_route_events.csv` and `events/supply_route_mask_only.csv`, tests in `tests/test_supply_route.py`. OPEC outputs byte-identical after the refactor.
@@ -26,7 +36,7 @@ Last updated: 2026-10-27 (supply-route rows entered, pre-war sample built)
 - 27 Oct, later: attack_2026_03_18 (Ras Laffan) moved to the events file at 15:28 ET (Libnanews live item, 19:28:14 GMT, confirmed by fetch; John's QNA time 15:21 ET, no URL), day 0 Wed 18 Mar. mask_2026_03_19 is now masked for spacing. Now 21 counted (15 pre-war), 18 masked (13 spacing, 4 no time, 1 off-route).
 - 27 Oct, last: attack_2021_03_07 (Ras Tanura) moved to the events file at 15:35 ET Sun (Saudi MoD via SPA 2197893, 23:35 AST, checked by hand by John; the page renders by script), day 0 Mon 8 Mar 2021. Its confound_note: 2 sessions after opec_2021_03_04, so [-5,+5] carries that OPEC+ move. **Final list: 22 counted (16 pre-war), 17 masked (13 spacing, 3 no time, 1 off-route).**
 - Decision lines for untimed attacks, earliest time and time_assumed masks pasted by John 27 Oct. attack_2026_07_22 is a UKMTO report at exactly 16:00 ET, so day 0 rolls to Thu 23 Jul.
-- Next: the first supply-route run, in a fresh session (handoff prompt given 27 Oct), on a clean commit; no row changes after results are seen. Then a README section (GLD beta near zero, ITA overlap with SPY, long 2026 estimation windows).
+- Next: John commits the run outputs, then README/STATUS/events CSV. Then decide on the chart axis fix and a clean rerun, after which the XLE supply-route chart can go into the README. Update the GitHub repo description (it may still say OPEC+ only).
 
 ## Changed this session (needs DECISIONS.md lines from the user)
 

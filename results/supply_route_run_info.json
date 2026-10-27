@@ -1,0 +1,109 @@
+{
+  "tickers": {
+    "XLE": {
+      "cache_file": "data/prices/XLE.csv",
+      "cache_modified": "2026-10-16T13:58:47-04:00",
+      "first_date": "2010-01-04",
+      "last_date": "2026-10-15",
+      "rows": 4222,
+      "dates_sha256": "892bb6f887b4f6578699d7d9d35c62dfa72c11290b11a23584f33286f6c79109",
+      "adj_close_sha256": "d5c9790b22c3b2ac3ed33028a490a48e25217c24d963932ef615b34073d6fbc2"
+    },
+    "ITA": {
+      "cache_file": "data/prices/ITA.csv",
+      "cache_modified": "2026-10-27T12:37:44-04:00",
+      "first_date": "2010-01-04",
+      "last_date": "2026-10-26",
+      "rows": 4229,
+      "dates_sha256": "5746fe106dc1332b536e62205307e48cbcca986a59c230a32b024d7d325ad195",
+      "adj_close_sha256": "c3c33f5becaa9cd27f8f0acfc4c0a8dbc5f67adafb0090ae255d881897ba4652"
+    },
+    "GLD": {
+      "cache_file": "data/prices/GLD.csv",
+      "cache_modified": "2026-10-27T12:37:44-04:00",
+      "first_date": "2010-01-04",
+      "last_date": "2026-10-26",
+      "rows": 4229,
+      "dates_sha256": "5746fe106dc1332b536e62205307e48cbcca986a59c230a32b024d7d325ad195",
+      "adj_close_sha256": "379e39a6e2dc556631d5e68ddebe04415ab8a06596223c22b7f8f2bfcae2beb9"
+    },
+    "SPY": {
+      "cache_file": "data/prices/SPY.csv",
+      "cache_modified": "2026-10-16T13:58:47-04:00",
+      "first_date": "2010-01-04",
+      "last_date": "2026-10-15",
+      "rows": 4222,
+      "dates_sha256": "892bb6f887b4f6578699d7d9d35c62dfa72c11290b11a23584f33286f6c79109",
+      "adj_close_sha256": "deba63577dc1695b4058c66ab4ecedb686fff2b94500eed5bba0e279ce1c90e4"
+    }
+  },
+  "returns_used": {
+    "XLE": {
+      "first_date": "2010-01-05",
+      "last_date": "2026-10-15",
+      "rows": 4221
+    },
+    "ITA": {
+      "first_date": "2010-01-05",
+      "last_date": "2026-10-15",
+      "rows": 4221
+    },
+    "GLD": {
+      "first_date": "2010-01-05",
+      "last_date": "2026-10-15",
+      "rows": 4221
+    }
+  },
+  "securities": [
+    "XLE",
+    "ITA",
+    "GLD"
+  ],
+  "benchmark": "SPY",
+  "expected_sign": {
+    "XLE": 1,
+    "ITA": 1,
+    "GLD": 1
+  },
+  "primary": {
+    "security": "XLE",
+    "window": [
+      0,
+      1
+    ],
+    "group": "all",
+    "test": "cross_sectional_t"
+  },
+  "group_columns": [
+    "route",
+    "escalation"
+  ],
+  "pre_war_before": "2026-02-28",
+  "est_length": 120,
+  "gap": 10,
+  "event_windows": [
+    [
+      0,
+      1
+    ],
+    [
+      -5,
+      5
+    ]
+  ],
+  "use_leak": true,
+  "min_spacing": 11,
+  "mask_day0_count": 79,
+  "events_file": "events/supply_route_events.csv",
+  "events_file_sha256": "3df955a8df78605cd9841c12d251155c29cabe1b43f1f0bc385f90911b0f2081",
+  "mask_file": "events/supply_route_mask_only.csv",
+  "mask_file_sha256": "c102e35c543925ed5b504a2b60aa5e290b70cd9be44886e88b175d89fb9bee14",
+  "opec_events_file": "events/opec_events.csv",
+  "opec_events_file_sha256": "71b8ade24cffa973fc59d2cfb6be5d8f44cc20b5896729509e866a1c96daec9a",
+  "opec_mask_file": "events/opec_mask_only.csv",
+  "opec_mask_file_sha256": "28e62bf9d2bb8c729a5936460c26e245420c701610d5bc47f4c1a46345d55271",
+  "yfinance_version": "1.7.0",
+  "pandas_version": "3.0.6",
+  "git_commit": "37a0ce44f658fbb6d8cffe3a0c5d1b8fb1becacc",
+  "git_dirty": false
+}
