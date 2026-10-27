@@ -37,7 +37,11 @@ Steps:
    (PRIMARY, DECISIONS.md) has role "primary" and is read unadjusted; every
    other row is "secondary". p_holm is the Holm-adjusted cs_p over the tested
    secondary "all" rows (the other five of 3 securities x 2 windows); the
-   primary has no p_holm.
+   primary has no p_holm. This is done for two samples (the `sample`
+   column): "all" attacks, and "pre_war", which leaves out attacks on or
+   after WAR_START (DECISIONS.md). pre_war rows are filtered from the same
+   results, have role "robustness" and no p_holm, and the attacks left out
+   are listed.
 
 With --dates-only the script prints, per event, day 0, the estimation window
 (est_start, est_end, skipped days, span) and nearby_events and
@@ -50,6 +54,9 @@ Assumptions:
   trims each security with SPY separately (reporting.common_dates).
 - OPEC+ events are masked at their main (leak-time) day 0 and the shifted
   day 0 of time_assumed rows, not at their official-time day 0.
+- An attack's date for the pre-war cut is the Eastern-time date of its
+  event time. No counted attack is within a day of the cut, so the local
+  date would give the same split.
 """
 
 import argparse
@@ -93,13 +100,18 @@ MASK_PATH = Path("events") / "supply_route_mask_only.csv"
 OPEC_EVENTS_PATH = Path("events") / "opec_events.csv"
 OPEC_MASK_PATH = Path("events") / "opec_mask_only.csv"
 
+# Pre-war robustness sample (DECISIONS.md): attacks on or after the day the
+# war began are left out.
+WAR_START = pd.Timestamp("2026-02-28")
+PRE_WAR = "pre_war"
+
 # The average-CAR chart has one line, all attacks pooled. Its key is the
 # line's label: draw_caar_chart writes it as "Attacks (N = ...)".
 CAAR_GROUP = "attack"
 CAAR_COLORS = {CAAR_GROUP: "#2a78d6"}
 
 ACROSS_COLUMNS = [
-    "security", "window", "group", "n_ok", "tested", "role", "expected_sign", "mean_car",
+    "sample", "security", "window", "group", "n_ok", "tested", "role", "expected_sign", "mean_car",
     "cross_sectional_t", "cs_p", "bmp_t", "wilcoxon_p", "sign_p", "p_holm", "note",
 ]  # fmt: skip
 LEGEND = (
@@ -107,6 +119,7 @@ LEGEND = (
     f"group '{PRIMARY[2]}'), fixed before the first run and read unadjusted; "
     "every other row is secondary."
 )
+PRE_WAR_LEGEND = "Pre-war sample: a robustness check, no primary and no Holm adjustment."
 
 
 def parse_args() -> argparse.Namespace:
@@ -274,12 +287,32 @@ def security_groups(results: pd.DataFrame) -> dict[str, pd.DataFrame]:
     )
 
 
+def pre_war(results: pd.DataFrame, war_start: pd.Timestamp = WAR_START) -> pd.DataFrame:
+    """The results for attacks before war_start (a filter, not a rerun).
+
+    The attack date is the Eastern-time date of event_time. tz_localize(None)
+    drops the time zone and keeps the Eastern clock time; normalize() sets
+    the time to midnight, leaving the date.
+    """
+    dates = results["event_time"].dt.tz_localize(None).dt.normalize()
+    return results[dates < war_start]
+
+
+def pre_war_excluded(results: pd.DataFrame, war_start: pd.Timestamp = WAR_START) -> pd.DataFrame:
+    """The attacks the pre_war sample leaves out, as event_id, status, reason."""
+    kept = pre_war(results, war_start)
+    rows = results.loc[~results.index.isin(kept.index), ["event_id", "status"]]
+    reason = f"on or after {war_start.date()} (war began)"
+    return rows.assign(reason=reason).reset_index(drop=True)
+
+
 def holm_p(table: pd.DataFrame) -> pd.Series:
     """Holm-adjusted cs_p for the tested secondary "all" rows, NaN elsewhere.
 
     The family is the other five "all" rows of 3 securities x 2 windows
-    (DECISIONS.md): the primary is named in advance and read unadjusted, so
-    it is left out, and so is an "all" row that was not tested.
+    (DECISIONS.md), in sample "all" only: the primary is named in advance
+    and read unadjusted, so it is left out, and so is an "all" row that was
+    not tested. pre_war rows have role "robustness", so they are never in it.
     """
     family = table["tested"] & (table["group"] == "all") & (table["role"] == "secondary")
     adjusted = pd.Series(float("nan"), index=table.index)
@@ -289,10 +322,10 @@ def holm_p(table: pd.DataFrame) -> pd.Series:
     return adjusted
 
 
-def across_event_table(
+def sample_table(
     results_by_security: dict[str, pd.DataFrame], windows=EVENT_WINDOWS
 ) -> pd.DataFrame:
-    """One row per security, window and group, with columns ACROSS_COLUMNS.
+    """One sample's rows: one per security, window and group.
 
     results_by_security: {ticker: its results table}. Numbers come from
     reporting.across_event_table (N counts "ok" rows only, fewer than
@@ -307,26 +340,71 @@ def across_event_table(
         )
         table["role"] = table["headline"].map({True: "primary", False: "secondary"})
         parts.append(table.assign(security=ticker, expected_sign=EXPECTED_SIGN[ticker]))
-    table = pd.concat(parts, ignore_index=True)
+    return pd.concat(parts, ignore_index=True)
+
+
+def across_event_table(
+    results_by_security: dict[str, pd.DataFrame],
+    windows=EVENT_WINDOWS,
+    war_start: pd.Timestamp = WAR_START,
+) -> pd.DataFrame:
+    """Both samples' rows ("all", then PRE_WAR), with columns ACROSS_COLUMNS.
+
+    The PRE_WAR rows come from pre_war(results) and have role "robustness":
+    the primary and the Holm family are in sample "all" only.
+    """
+    full = sample_table(results_by_security, windows).assign(sample="all")
+    early = sample_table(
+        {ticker: pre_war(r, war_start) for ticker, r in results_by_security.items()}, windows
+    ).assign(sample=PRE_WAR, role="robustness")
+    table = pd.concat([full, early], ignore_index=True)
     table["p_holm"] = holm_p(table)
     return table[ACROSS_COLUMNS]
 
 
-def print_across_event(table: pd.DataFrame, results_by_security: dict[str, pd.DataFrame]) -> None:
-    """Per security: reporting.print_across_event with the primary marked "*",
-    then the cross-sectional p-values of the "all" rows with Holm.
+def print_across_event(
+    table: pd.DataFrame,
+    results_by_security: dict[str, pd.DataFrame],
+    war_start: pd.Timestamp = WAR_START,
+) -> None:
+    """Sample "all", per security: reporting.print_across_event with the
+    primary marked "*", then the cross-sectional p-values of the "all" rows
+    with Holm. Then the same tables for the pre-war sample, and the attacks
+    it leaves out.
     """
+    full = table[table["sample"] == "all"]
     for ticker, results in results_by_security.items():
         print(f"\n=== {ticker} vs {BENCHMARK} (expected sign {EXPECTED_SIGN[ticker]:+d}) ===")
-        part = table[table["security"] == ticker]
+        part = full[full["security"] == ticker]
         # reporting marks rows whose headline is True.
         marked = part.assign(headline=part["role"] == "primary")
         reporting.print_across_event(marked, results, "route", LEGEND)
-    print_holm(table)
+    print_holm(full)
+
+    early = table[table["sample"] == PRE_WAR]
+    print(f"\n##### Sample: pre-war (attacks before {war_start.date()}), robustness only #####")
+    for ticker, results in results_by_security.items():
+        print(f"\n=== {ticker} vs {BENCHMARK}, pre-war ===")
+        part = early[early["security"] == ticker].assign(headline=False)
+        reporting.print_across_event(part, pre_war(results, war_start), "route", PRE_WAR_LEGEND)
+    # The same attacks go into every security's run, so any one table will do.
+    print_pre_war_excluded(next(iter(results_by_security.values())), war_start)
+
+
+def print_pre_war_excluded(results: pd.DataFrame, war_start: pd.Timestamp = WAR_START) -> None:
+    """List the attacks left out of the pre_war sample, with route and status."""
+    left_out = pre_war_excluded(results, war_start)
+    print(f"\nLeft out of the pre_war sample ({len(left_out)}):")
+    routes = results.set_index("event_id")["route"]
+    for _, row in left_out.iterrows():
+        print(f"  {row['event_id']} ({routes[row['event_id']]}, {row['status']}): {row['reason']}")
 
 
 def print_holm(table: pd.DataFrame) -> None:
-    """The cross-sectional p-values of the "all" rows, unadjusted and Holm-adjusted."""
+    """The cross-sectional p-values of the "all" rows, unadjusted and Holm-adjusted.
+
+    Pass sample "all" only.
+    """
     print(
         "\nCross-sectional t, group 'all' (two-sided). The primary (*) is read from "
         "cs p, unadjusted, and has no Holm p; the rest are secondary, with Holm p over "
@@ -369,6 +447,7 @@ def build_run_info(prices: dict, returns: dict, git: tuple, mask_day0s) -> dict:
             "test": "cross_sectional_t",
         },
         "group_columns": list(GROUP_COLUMNS),
+        "pre_war_before": str(WAR_START.date()),
         "est_length": EST_LENGTH,
         "gap": GAP,
         "event_windows": [list(w) for w in EVENT_WINDOWS],

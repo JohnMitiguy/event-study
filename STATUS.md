@@ -1,6 +1,6 @@
 # Status
 
-Last updated: 2026-10-26 (end of session)
+Last updated: 2026-10-27 (supply-route rows entered, pre-war sample built)
 
 ## Where we are
 
@@ -12,15 +12,21 @@ Last updated: 2026-10-26 (end of session)
 - Outlier-exclusion run built (`no_outliers` sample in `opec_across_event*.csv`): top 5 residual days, using one full-sample beta (an assumption, DECISIONS.md does not say which beta), are 2020-11-09, 2020-03-09, 2020-03-18, 2020-04-17, 2020-04-02. 9 Mar 2020 is masked, so it hits no fit. 5 events are dropped (opec_2020_04_09, opec_2020_06_06, opec_2020_12_03, opec_2021_03_04, opec_2021_07_18). Cuts N 6: +1.61% (t 1.41); increases N 15: -0.88% (t -0.93); increases [-5,+5] -3.34% (t -2.44). `runner.estimation_days` gives the fitted days per event.
 - opec_2025_04_03 is the biggest single event: [-1,+1] -12.40% (t -6.09) during the 3-4 Apr 2025 selloff (SPY -4.9%, -5.8%). confound_note now filled (2 Apr tariffs after the close, Fox Business); the other 16 increases average +0.23% (t 0.29) on [-1,+1].
 - README now has a Results section, the average-CAR chart (`charts/opec_caar.png`), a filled Excluded events table, and fixes for the stale lines found in the 21 Oct audit.
-- Tests: ruff clean, 442 passed, 2 skipped.
+- Tests (27 Oct): ruff clean, 445 passed.
 
 ## Supply-route attacks (second event type, built 26 Oct 2026, no events yet)
 
 - Plan approved and decisions committed (560b69d): XLE primary, ITA and GLD secondary, all vs SPY, expected sign positive; primary test XLE [0,+1] cross-sectional t, all attacks pooled; windows [0,+1] and [-5,+5]; Holm p over the other five; two-sided; subgroups route and escalation; counted attacks at least 11 trading days apart; no time_assumed rows; attack runs mask all OPEC events and OPEC masks (main and shifted day 0); OPEC runs do not mask attacks until a v1.1.
 - Built: `src/event_study/reporting.py` (shared helpers moved out of run_opec.py), `group_columns` in the runner, `events.load_supply_route_events` (spacing check), `scripts/run_supply_route.py` (`--dates-only`; no `--refresh`, so the shared XLE/SPY cache is never replaced), header-only `events/supply_route_events.csv` and `events/supply_route_mask_only.csv`, tests in `tests/test_supply_route.py`. OPEC outputs byte-identical after the refactor.
 - The run refuses to start below 5 events. The first `--dates-only` run downloads ITA and GLD once.
-- Candidates saved in `events/supply_route_candidates.md` (39 rows; Q-A/Q-B/Q-C settled at its top; about 20 expected to count after spacing). To build: pre-war sample filter (before 2026-02-28) in run_supply_route.py.
-- Next: enter the counted rows one at a time after checking each source and converting times to ET; then `--dates-only`, then the first run, then a README section (GLD beta near zero, ITA overlap with SPY).
+- Candidates saved in `events/supply_route_candidates.md` (39 rows; Q-A/Q-B/Q-C settled at its top).
+- 27 Oct: pre-war sample built (`sample` column `all`/`pre_war` in `supply_route_across_event.csv`; pre_war rows have role `robustness`, no primary, no Holm; left-out attacks listed). `WAR_START` = 2026-02-28, compared with the ET date of event_time.
+- 27 Oct: all 39 candidates entered (counts updated below). 20 counted in `supply_route_events.csv` (15 pre-war), 19 in `supply_route_mask_only.csv` (12 spacing, 6 no time, 1 off-route). `--dates-only` runs clean: no attack has a nearby attack, est_span 131 to 267 sessions (2026 attacks reach back to mid-2025 because the war months are mostly masked). Each row's notes give the source time as stated, the ET conversion, and a fetch-check line.
+- Fetch check: only attack_2019_07_19, attack_2019_09_14, attack_2020_11_23, attack_2022_01_17 and the dates of 7 mask rows were confirmed by fetch. CENTCOM, ONI, UKMTO, S&P, Seatrade and GlobalSecurity block the fetch tool (403/402). John checked the other 16 by hand on 27 Oct ("all good or good enough"); their notes say so.
+- 27 Oct, later: attack_2026_03_18 (Ras Laffan) moved to the events file at 15:28 ET (Libnanews live item, 19:28:14 GMT, confirmed by fetch; John's QNA time 15:21 ET, no URL), day 0 Wed 18 Mar. mask_2026_03_19 is now masked for spacing. Now 21 counted (15 pre-war), 18 masked (13 spacing, 4 no time, 1 off-route).
+- Waiting on a URL: mask_2021_03_07 (Ras Tanura). John reports MoD 23:35 AST, but Argaam and Ajel give only "morning"/"this evening". If it counts, day 0 is Mon 8 Mar 2021, 2 sessions after opec_2021_03_04, so it needs a confound_note ([-5,+5] holds that OPEC surprise).
+- Defaults taken, need Decision lines from John: untimed attacks are masked even when the date alone pins day 0 (attack 2021-03-07 Sun and 2026-03-19 "early Thursday" would otherwise count, +2 events); earliest time used when a source gives several; zone not stated = local time of the site (every such row gives the same day 0 read as UTC); untimed or conflicting-time mask rows are time_assumed (both days masked). attack_2026_07_22 is a UKMTO report at exactly 16:00 ET, so day 0 rolls to Thu 23 Jul.
+- Next: John confirms the 16 blocked sources by hand, pastes the Decision lines, commits; then the first run (do not run before, so no row is changed after seeing results); then a README section (GLD beta near zero, ITA overlap with SPY, long 2026 estimation windows).
 
 ## Changed this session (needs DECISIONS.md lines from the user)
 

@@ -122,6 +122,12 @@ Decision: Routes are gulf_facility (an energy facility of a Gulf state, wherever
 
 Decision: A pre-war robustness sample leaves out attacks on or after 2026-02-28, filtered from the full run's results. Reason: the war moves oil on its own, so attacks inside it can't be separated from it.
 
+Decision: An attack with no stated time is masked even when its date alone pins day 0 (weekend, holiday, or a local time after the NYSE close). Reason: the attack rule asks for a timestamped source, and keeping it strict was fixed before any returns were read.
+
+Decision: When a source gives several times for one attack, the earliest is the event time, and a time with no zone is read as local time at the attack site. Reason: the earliest report is when news could first reach the market, and every such row gives the same day 0 when read as UTC.
+
+Decision: Mask-only attacks with no time or with conflicting times are flagged time_assumed, so both the date and the next session are masked. Reason: masking one extra day costs a little estimation data, while missing the reaction day would bend the baseline.
+
 ## Not built yet
 - Official-time robustness run (the --official-time flag exists, but the run has not been done)
 - Saudi unilateral subsample report

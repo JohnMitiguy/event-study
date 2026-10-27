@@ -23,6 +23,7 @@ from event_study.event_days import next_session, nyse_calendar
 from event_study.events import (
     MASK_COLUMNS,
     SUPPLY_ROUTE_COLUMNS,
+    load_mask_events,
     load_supply_route_events,
 )
 from event_study.runner import run_events
@@ -72,11 +73,14 @@ def session_date(start: str, offset: int) -> str:
 # --- Loader -------------------------------------------------------------------
 
 
-def test_real_supply_route_files_are_header_only():
+def test_real_supply_route_files_load():
+    """Both real files pass every check (the loader also checks the spacing),
+    and no attack is both counted and masked."""
     events = load_supply_route_events(ROOT / "events" / "supply_route_events.csv")
-    assert events.empty
-    with (ROOT / "events" / "supply_route_mask_only.csv").open(encoding="utf-8") as f:
-        assert f.read().strip() == ",".join(MASK_COLUMNS)
+    masks = load_mask_events(ROOT / "events" / "supply_route_mask_only.csv")
+    assert len(events) >= 5
+    assert set(events["event_id"]).isdisjoint(masks["event_id"])
+    assert not events["time_assumed"].any()
 
 
 def test_valid_two_row_file_loads(tmp_path):
@@ -251,7 +255,10 @@ def simulated_events(dates: pd.DatetimeIndex, rows, routes=None, escalations=Non
             "route": routes or ["red_sea"] * n,
             "escalation": escalations or ["first_attack"] * n,
             "surprise_flag": pd.array([pd.NA] * n, dtype="Int64"),
-            "event_time": pd.NaT,
+            # 10:00 ET on day 0, so the pre-war filter has a date to read.
+            "event_time": (dates[list(rows)] + pd.Timedelta(hours=10)).tz_localize(
+                "America/New_York"
+            ),
             "used_leak": False,
             "day0": dates[list(rows)],
             "time_assumed": False,
@@ -305,10 +312,15 @@ def simulated_runs(n_events: int = 7) -> dict[str, pd.DataFrame]:
 def test_across_table_has_one_primary_and_holm_over_all_rows(capsys):
     run = load_script("run_supply_route")
     runs = simulated_runs()
-    table = run.across_event_table(runs)
-    assert list(table.columns) == run.ACROSS_COLUMNS
-    # 3 securities x 2 windows x 6 groups (all, 3 routes, 2 escalations).
-    assert len(table) == 36
+    both = run.across_event_table(runs)
+    assert list(both.columns) == run.ACROSS_COLUMNS
+    # 2 samples x 3 securities x 2 windows x 6 groups (all, 3 routes, 2 escalations).
+    assert len(both) == 72
+    assert both["sample"].value_counts().to_dict() == {"all": 36, "pre_war": 36}
+    # Every simulated attack is before the war, so the samples match.
+    assert (both.loc[both["sample"] == "pre_war", "role"] == "robustness").all()
+    assert both.loc[both["sample"] == "pre_war", "p_holm"].isna().all()
+    table = both[both["sample"] == "all"]
 
     primary = table[table["role"] == "primary"]
     assert len(primary) == 1
@@ -341,15 +353,48 @@ def test_across_table_has_one_primary_and_holm_over_all_rows(capsys):
         assert pd.isna(by_group.loc[group, "cs_p"])
     assert by_group.loc["red_sea", "tested"]
 
-    run.print_across_event(table, runs)
+    run.print_across_event(both, runs)
     out = capsys.readouterr().out
     assert "read unadjusted" in out and "secondary" in out
+    assert "Left out of the pre_war sample (0):" in out
     assert "'all' is descriptive only" not in out
     starred = [line for line in out.splitlines() if line.startswith("  * ")]
     # The primary row in the XLE table, then in the Holm list.
     assert len(starred) == 2
     assert starred[0].split()[1] == "all"
     assert starred[1].split()[1:3] == ["XLE", "[+0,+1]"]
+
+
+def test_pre_war_sample_leaves_out_attacks_from_war_start(capsys):
+    """With the cut moved to the 5th attack's date, pre_war keeps 4 attacks.
+
+    4 is below 5, so no pre_war row is tested, the attacks from the cut on
+    are listed with their reason, and the "all" sample is unchanged.
+    """
+    run = load_script("run_supply_route")
+    runs = simulated_runs()
+    xle = runs["XLE"]
+    cut = xle["event_time"].iloc[4].tz_localize(None).normalize()
+    kept = run.pre_war(xle, cut)
+    assert kept["event_id"].tolist() == [f"sim_{i}" for i in range(4)]
+
+    left_out = run.pre_war_excluded(xle, cut)
+    assert left_out["event_id"].tolist() == ["sim_4", "sim_5", "sim_6"]
+    assert (left_out["reason"] == f"on or after {cut.date()} (war began)").all()
+
+    table = run.across_event_table(runs, war_start=cut)
+    early = table[table["sample"] == "pre_war"]
+    assert (early.loc[early["group"] == "all", "n_ok"] == 4).all()
+    assert not early["tested"].any()
+    full = table[table["sample"] == "all"]
+    assert full.reset_index(drop=True).equals(
+        run.across_event_table(runs)[lambda t: t["sample"] == "all"].reset_index(drop=True)
+    )
+
+    run.print_across_event(table, runs, war_start=cut)
+    out = capsys.readouterr().out
+    assert "Left out of the pre_war sample (3):" in out
+    assert f"sim_4 (red_sea, ok): on or after {cut.date()} (war began)" in out
 
 
 def test_holm_family_shrinks_to_tested_rows():
