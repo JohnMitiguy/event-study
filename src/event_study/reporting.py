@@ -106,8 +106,17 @@ def stop_if_data_too_short(
 
 
 def file_sha256(path: Path) -> str:
-    """SHA-256 of a file's bytes."""
-    return hashlib.sha256(path.read_bytes()).hexdigest()
+    """SHA-256 of a text file's bytes, with every Windows line ending made Unix.
+
+    Every b"\\r\\n" is replaced by b"\\n" before hashing. git checks a file out
+    with CRLF line endings on Windows (core.autocrlf true) and LF on Linux,
+    so hashing raw bytes would give two hashes for one committed file. This
+    hash matches the committed (LF) file on any checkout.
+
+    Used for the events and mask-only CSVs, which are text. A lone b"\\r" is
+    left as it is, so a real content change still changes the hash.
+    """
+    return hashlib.sha256(path.read_bytes().replace(b"\r\n", b"\n")).hexdigest()
 
 
 def git_state() -> tuple[str | None, bool | None]:

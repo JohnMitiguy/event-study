@@ -10,7 +10,7 @@ Task:
 Review the most recent commit. Run `git log -5 --stat` and `git diff HEAD~1`. Also run `git status` and mention any uncommitted changes, but don't review them unless they touch methodology. Report:
 
 - What changed, in a few lines.
-- Whether methodology changed (windows, day 0 rules, event time, the market model, test statistics, aggregation, exclusions, data handling) without a matching DECISIONS.md entry in the same commit.
+- Whether methodology changed (windows, day 0 rules, event time, the market model, test statistics, aggregation, exclusions, data handling) with no matching DECISIONS.md entry. An entry in the same commit or an earlier one is fine; flag only changes with no entry anywhere.
 - Whether tests cover each behavior change: name the test file and test, or say none does.
 - Anything that could silently change a result: a CAR, a t-stat, N, or which events count as ok.
 

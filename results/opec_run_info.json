@@ -39,11 +39,16 @@
   "use_leak": true,
   "shift_assumed": false,
   "events_file": "events/opec_events.csv",
-  "events_file_sha256": "71b8ade24cffa973fc59d2cfb6be5d8f44cc20b5896729509e866a1c96daec9a",
+  "events_file_sha256": "f47b073bc0840f97c91651a68aec0ac085e91e61f53cee5250c287f081f34cda",
   "mask_file": "events/opec_mask_only.csv",
   "mask_file_sha256": "28e62bf9d2bb8c729a5936460c26e245420c701610d5bc47f4c1a46345d55271",
+  "supply_route_events_file": "events/supply_route_events.csv",
+  "supply_route_events_file_sha256": "a0f7ce7350bf47162bfb3e7494cb3d607fe45e2ddbf51eda6006c11ef7f8b440",
+  "supply_route_mask_file": "events/supply_route_mask_only.csv",
+  "supply_route_mask_file_sha256": "803ecbdc5598bfdd3ad8a0fb089bee0603e4b96dc094ddc31a551b9294e285b1",
+  "attack_mask_day0_count": 40,
   "yfinance_version": "1.7.0",
   "pandas_version": "3.0.6",
-  "git_commit": "c0466d1b541b15d755c333523717abb5df3e0160",
-  "git_dirty": false
+  "git_commit": "08ac9ca2d18c754d50bd763275f8f176cad059c8",
+  "git_dirty": true
 }

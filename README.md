@@ -16,8 +16,8 @@ CAR (cumulative abnormal return) is a security's return minus what SPY predicts,
 
 ![XLE average cumulative abnormal return around OPEC+ decisions](charts/opec_caar.png)
 
-- **Headline: no significant effect.** Over days -1 to +1, cuts average +1.51% (t 1.56, N 7) and increases -0.51% (t -0.49, N 17). The signs match theory, but neither is statistically different from zero.
-- **Increases drift down over a wider window.** Over days -5 to +5, increases average -3.26% (t -2.38), and this holds in every robustness sample (t -2.42 to -3.19). It was not the pre-set headline window, and one of the 17 increases (3 Apr 2025) lands on the US tariff selloff, so treat it as suggestive.
+- **Headline: no significant effect.** Over days -1 to +1, cuts average +1.51% (t 1.64, N 7) and increases -0.40% (t -0.38, N 17). The signs match theory, but neither is statistically different from zero.
+- **Increases drift down over a wider window, but only borderline.** Over days -5 to +5, increases average -2.82% (t -2.08, p 0.054), just short of significance at 5%. Across the robustness samples t is -2.06 to -2.90. It was not the pre-set headline window, and one of the 17 increases (3 Apr 2025) lands on the US tariff selloff, so treat it as suggestive.
 - **Most of the cut move comes before day 0.** By day -1, cuts are already up +3.10% on average (cumulated from day -5), consistent with decisions being anticipated or leaked before the official release.
 
 ### 2. Attacks on oil supply routes
@@ -30,7 +30,7 @@ CAR (cumulative abnormal return) is a security's return minus what SPY predicts,
 - **Nothing else survives a multiple-testing correction.** Of the five other security and window tests, XLE over days -5 to +5 comes closest (+2.27%, p 0.035), but its Holm-adjusted p is 0.18. Most of that move (+1.83%) comes before the attacks, so it isn't a reaction to them. ITA and GLD show nothing.
 - **One attack carries much of the average.** The Nov 2020 missile strike on Aramco's Jeddah plant (+9.84%) landed on the same days as the Oxford/AstraZeneca vaccine result and the start of the Biden transition. Without it, the other 21 attacks average +0.16%.
 
-**Rigor:** no look-ahead (each model is fitted only on days well before its event, skipping every other event's window), main tests fixed before the first run, Holm adjustment for the attack study's secondary tests, a frozen price snapshot with hashes and the git commit recorded for every run, 448 automated tests, robustness checks (shifted dates, official times, outlier exclusion, a pre-war sample), and null headlines reported as nulls.
+**Rigor:** no look-ahead (each model is fitted only on days well before its event, skipping every other event's window), main tests fixed before the first run, Holm adjustment for the attack study's secondary tests, a frozen price snapshot with hashes and the git commit recorded for every run, 463 automated tests, robustness checks (shifted dates, official times, outlier exclusion, a pre-war sample), and null headlines reported as nulls.
 
 Full method, results and limitations below. Every methodology decision and its reason is logged in [DECISIONS.md](DECISIONS.md).
 
@@ -49,7 +49,7 @@ A finding of "no measurable effect" is a valid result here and gets reported as 
 
 This part is shared by both event types. Each event type then fixes its own groups, windows and main test, in its own section below.
 
-For each event and security, a market model is fitted by ordinary least squares: the security's daily return regressed on SPY's, over an estimation window that ends before the event (by default 120 trading days, ending 10 trading days before day 0). Days inside another event's widest event window (days -5 to +5 of that event, with the default windows) are left out, and the window reaches further back instead. The same goes for real news that is not tested, such as failed OPEC+ meetings or attacks too close to a counted one, listed in the mask-only files (`events/opec_mask_only.csv`, `events/supply_route_mask_only.csv`). So the regression still uses 120 days, none of them inside another event's window. The results show each event's first and last estimation day (`est_start`, `est_end`) and how many days were skipped (`est_masked_days`).
+For each event and security, a market model is fitted by ordinary least squares: the security's daily return regressed on SPY's, over an estimation window that ends before the event (by default 120 trading days, ending 10 trading days before day 0). Days inside another event's widest event window (days -5 to +5 of that event, with the default windows) are left out, and the window reaches further back instead. The same goes for real news that is not tested, such as failed OPEC+ meetings or attacks too close to a counted one, listed in the mask-only files (`events/opec_mask_only.csv`, `events/supply_route_mask_only.csv`). Each study also skips the other study's windows: OPEC+ estimation windows skip attack windows, and attack estimation windows skip OPEC+ windows. So the regression still uses 120 days, none of them inside another event's window. The results show each event's first and last estimation day (`est_start`, `est_end`) and how many days were skipped (`est_masked_days`).
 
 The abnormal return on each day around the event is the security's actual return minus what the model predicted from SPY that day. Abnormal returns are summed into cumulative abnormal returns (CARs) over short windows. Day 0 is the first trading day the market could react to the news: a time at or after that day's close (4pm ET, or 1pm on early-close days), on a weekend or on a holiday rolls forward to the next trading day. The event time is the leak time if there was a credible timed leak, otherwise the official announcement or report time. All windows count trading days, not calendar days. Returns are simple daily returns from adjusted close prices.
 
@@ -63,32 +63,41 @@ CARs are then averaged across events and the average is tested: cross-sectional 
 
 ### Results
 
-First full run, 26 Oct 2026: 37 OPEC+ decisions from Dec 2016 to Oct 2026, all 37 ran (none failed), prices through 15 Oct 2026. Event time is the leak time where there is one (one event), otherwise the announcement. The chart is in [In 30 seconds](#in-30-seconds).
+v1.1 run, 27 Oct 2026: 37 OPEC+ decisions from Dec 2016 to Oct 2026, all 37 ran (none failed), prices through 15 Oct 2026. From v1.1 the estimation windows also skip every supply-route attack, so the numbers differ slightly from v1.0.0 (see [What changed in v1.1](#what-changed-in-v11)). Event time is the leak time where there is one (one event), otherwise the announcement. The chart is in [In 30 seconds](#in-30-seconds).
 
 | Group | N | Mean CAR [-1,+1] | t | Mean CAR [-5,+5] | t |
 |---|---|---|---|---|---|
-| Cuts | 7 | +1.51% | 1.56 | +3.34% | 1.40 |
-| Increases | 17 | -0.51% | -0.49 | -3.26% | -2.38 |
-| Holds | 13 | +0.46% | 0.48 | +0.29% | 0.25 |
+| Cuts | 7 | +1.51% | 1.64 | +3.39% | 1.49 |
+| Increases | 17 | -0.40% | -0.38 | -2.82% | -2.08 |
+| Holds | 13 | +0.52% | 0.55 | +0.60% | 0.50 |
 
 t is the cross-sectional t-test. The headline is the [-1,+1] column for cuts and increases.
 
 **What it says.**
 
 - **The headline is a null result.** XLE moves the way theory says (up after cuts, down after increases), but neither [-1,+1] average is statistically different from zero. With only 7 cuts, a test at 5% would need a much larger average reaction to register.
-- **Increases show a slower drift.** Over [-5,+5] the 17 increases average -3.26% (t -2.38; BMP t -2.47; Wilcoxon p 0.045). Dropping any single event keeps t between -2.03 and -2.79. This window was not the headline, so treat it as suggestive, not as the finding.
-- **Much of the move comes before day 0.** By day -1, cuts are already up +3.10% on average and increases down -2.02%. That fits decisions being reported or expected days before the official release. The 10-day gap before the estimation window keeps this run-up out of the baseline.
+- **Increases show a slower drift, but only borderline.** Over [-5,+5] the 17 increases average -2.82% (t -2.08, p 0.054; BMP t -2.19; Wilcoxon p 0.080). Dropping any single event gives t between -1.72 and -2.51, so the result depends on which events are in. This window was not the headline, so treat it as suggestive at most, not as the finding.
+- **Much of the move comes before day 0.** By day -1, cuts are already up +3.10% on average and increases down -1.81%. That fits decisions being reported or expected days before the official release. The 10-day gap before the estimation window keeps this run-up out of the baseline.
 
 **Robustness.**
 
-- **Day 0 one trading day later for the 13 rows with an assumed announcement time:** cuts [-1,+1] +0.80% (t 0.57), increases -0.82% (t -0.90), increases [-5,+5] -3.33% (t -2.42).
-- **Without those 13 rows:** only 3 cuts remain, too few to test. Increases (N 14) are -1.37% on [-1,+1] (t -1.34) and -4.55% on [-5,+5] (t -3.19).
-- **Without events fitted on the 5 most extreme days:** the 5 largest XLE-minus-beta-times-SPY days of 2010 to 2026 are 9 Nov 2020 (+13.0%), 9 Mar 2020 (-12.1%), 18 Mar 2020 (-9.1%), 17 Apr 2020 (+7.8%) and 2 Apr 2020 (+6.8%). Five events are fitted on one of them and are dropped (Apr, Jun and Dec 2020, Mar and Jul 2021). Cuts (N 6) are +1.61% on [-1,+1] (t 1.41) and increases (N 15) are -0.88% (t -0.93), with increases at -3.34% on [-5,+5] (t -2.44).
+- **Day 0 one trading day later for the 13 rows with an assumed announcement time:** cuts [-1,+1] +0.80% (t 0.59), increases -0.70% (t -0.77), increases [-5,+5] -2.82% (t -2.06).
+- **Without those 13 rows:** only 3 cuts remain, too few to test. Increases (N 14) are -1.26% on [-1,+1] (t -1.22) and -4.10% on [-5,+5] (t -2.90).
+- **Without events fitted on the 5 most extreme days:** the 5 largest XLE-minus-beta-times-SPY days of 2010 to 2026 are 9 Nov 2020 (+13.0%), 9 Mar 2020 (-12.1%), 18 Mar 2020 (-9.1%), 17 Apr 2020 (+7.8%) and 2 Apr 2020 (+6.8%). Five events are fitted on one of them and are dropped (Apr, Jun and Dec 2020, Mar and Jul 2021). Cuts (N 6) are +1.59% on [-1,+1] (t 1.46) and increases (N 15) are -0.76% (t -0.80), with increases at -2.93% on [-5,+5] (t -2.16).
 - **Official announcement time instead of the leak:** the numbers are identical, because the one leak (5 Oct 2022) came the same morning as the release.
 
-**Largest single event.** On 3 Apr 2025 (opec_2025_04_03, an increase), the [-1,+1] CAR is -12.40% (t -6.09). Those days were a broad selloff: SPY fell 4.9% and 5.8% on 3 and 4 Apr, and XLE fell 7.9% and 9.2%. The US tariff announcement came on 2 Apr after the US close (Fox Business), so it lands on the same day 0 as the OPEC+ increase, and the two can't be separated. This is recorded in `confound_note`. Per DECISIONS.md, the event stays in the main run. Without it, the other 16 increases average +0.23% on [-1,+1] (t 0.29).
+**Largest single event.** On 3 Apr 2025 (opec_2025_04_03, an increase), the [-1,+1] CAR is -12.40% (t -6.09). Those days were a broad selloff: SPY fell 4.9% and 5.8% on 3 and 4 Apr, and XLE fell 7.9% and 9.2%. The US tariff announcement came on 2 Apr after the US close (Fox Business), so it lands on the same day 0 as the OPEC+ increase, and the two can't be separated. This is recorded in `confound_note`. Per DECISIONS.md, the event stays in the main run. Without it, the other 16 increases average +0.35% on [-1,+1] (t 0.44).
+
+**Attacks inside OPEC+ windows.** 12 OPEC+ events have a supply-route attack (counted or masked) whose day 0 falls in their [-5,+5], 8 of them increases, and 5 of those have one in [-1,+1] (Jul 2025, Mar, May, Jul and Aug 2026). Attack days are skipped in estimation, never inside event windows, and an attack should lift XLE, so these work against the expected sign for increases. Without those 8, the other 9 increases average -4.85% on [-5,+5] (t -2.35). This is a descriptive check, not a pre-registered test.
 
 Outputs: `results/opec_results.csv` (per event), `results/opec_across_event.csv` (group tests for all three samples: all events, without assumed times, without outlier-fitted events), `results/opec_abnormal.csv` (daily abnormal returns), `charts/opec_events.png` (one panel per event). The robustness runs write the same files with `_day0_shifted` or `_official_time` added. `results/opec_run_info.json` records the data hashes, settings and git commit of each run.
+
+### What changed in v1.1
+
+- **OPEC+ estimation windows now also skip the [-5,+5] days of every supply-route attack** (counted and masked), as DECISIONS.md planned. Event days and the event list are unchanged.
+- **22 of 37 events got a different estimation window.** The biggest changes are the 2026 events during the war, and the longest look-back went from 197 to 296 trading days.
+- **The headline stays null.** Increases over [-5,+5] went from -3.26% (t -2.38, p 0.030) to -2.82% (t -2.08, p 0.054).
+- The v1.0.0 results are at the v1.0.0 release tag.
 
 ## Supply-route attacks
 
@@ -114,7 +123,7 @@ Fixed and logged before any returns were read (DECISIONS.md):
 - **Secondary tests:** the other five security and window pairs, with Holm-adjusted p-values. Every test is two-sided.
 - **Subgroups:** route (gulf_facility, red_sea, hormuz) and escalation (first_attack, named_escalation), each tested only with at least 5 events and not adjusted.
 - **Pre-war sample:** a robustness check that leaves out attacks on or after 28 Feb 2026, the start of the US-Iran war, because the war moves oil on its own. It has no primary test and no Holm adjustment.
-- **OPEC+ news is masked.** Attack estimation windows also skip the windows of every OPEC+ event and OPEC+ mask-only row (both the main and the shifted day 0 of rows with an assumed time), so OPEC+ news doesn't bend XLE's baseline. The OPEC+ runs don't skip attack windows yet, so the v1.0.0 OPEC+ results stay fixed until a v1.1 rerun.
+- **OPEC+ news is masked.** Attack estimation windows also skip the windows of every OPEC+ event and OPEC+ mask-only row (both the main and the shifted day 0 of rows with an assumed time), so OPEC+ news doesn't bend XLE's baseline. From v1.1 the OPEC+ runs skip attack windows the same way.
 
 ### Results
 
@@ -170,7 +179,7 @@ On 23 Nov 2020 a Houthi missile hit a fuel tank at Aramco's North Jeddah bulk pl
 - **2026 estimation windows reach back to mid-2025.** OPEC+ decisions are monthly and many attacks during the war are masked, so the 2026 windows skip 83 to 165 days and start between Apr and Jun 2025. Their baselines come mostly from before the war.
 - **attack_2026_07_22 is a UKMTO report at exactly 16:00 ET**, the close, so its day 0 rolls to Thu 23 Jul.
 - **Seven attack windows contain an OPEC+ decision.** OPEC+ days are masked in estimation, not inside event windows. Two attacks share day 0 with an OPEC+ increase: attack_2025_07_06 (opec_2025_07_05) and attack_2026_03_01 (opec_2026_03_01). An increase should push XLE down, so these work against the expected sign; without them XLE [0,+1] is +0.52% (t 0.80, N 20). Five more have one elsewhere in [-5,+5]: attack_2021_03_07 and attack_2024_03_06 (holds at day -2), attack_2025_08_31 and attack_2026_06_27 (increases at day +4), attack_2025_09_29 (an increase at day +5).
-- **attack_2021_03_07 is 2 sessions after opec_2021_03_04** (an OPEC+ hold, XLE [-1,+1] +8.73%). Its [-5,+5] CAR (+5.96%) carries that move, while its [0,+1] (-2.42%) does not. Without it, XLE [-5,+5] is +2.10% (t 2.01). These checks are descriptive, not pre-registered.
+- **attack_2021_03_07 is 2 sessions after opec_2021_03_04** (an OPEC+ hold, XLE [-1,+1] +8.80%). Its [-5,+5] CAR (+5.96%) carries that move, while its [0,+1] (-2.42%) does not. Without it, XLE [-5,+5] is +2.10% (t 2.01). These checks are descriptive, not pre-registered.
 - **Four counted attacks share their [0,+1] window with a masked attack.** The spacing rule masks later attacks in estimation but never inside an event window, so the [0,+1] CARs of attack_2019_05_12, attack_2025_07_06, attack_2026_03_01 and attack_2026_03_18 also carry a second attack (mask_2019_05_14, mask_2025_07_07, the two 2 Mar 2026 masks, mask_2026_03_19). Without those four, XLE [0,+1] is +0.41% (t 0.58, N 18), a descriptive check, not a pre-registered test.
 - **The 2026 attacks are inside the war**, and the last two came after the Houthis declared a blockade of Saudi Arabia on 20 Jul 2026. The tests assume events are independent, and attacks within one war may not be.
 - **Attacks are not the only supply news.** Only attacks and OPEC+ news are masked in estimation. Sanctions, outages and other supply news are not.
@@ -184,9 +193,9 @@ These apply to both event types unless marked.
 - **Confounding news.** A CAR picks up everything that moved the security relative to SPY in the window, not only the event. Other news on the same days (an oil supply shock, a big energy company's earnings, a vaccine result, a market-wide selloff that hits energy harder) can look like an event effect. The `confound_note` column records known cases, but it can't catch everything, and longer windows are more exposed.
 - **Thin samples.** OPEC+ decisions and major attacks are infrequent, and some subgroups (for example Saudi unilateral actions, or attacks on one route) have only a handful of events. With few events the cross-event test has little power, and one unusual event can drive the average, as the largest single events above show.
 - **Few OPEC+ events without the assumed times.** 13 of the 37 OPEC+ events have no sourced announcement time (`time_assumed`). In the without-`time_assumed` report only 3 of the 7 cuts remain (below the 5-event minimum), so the cut group shows "too few events" there and is not tested. The all-events cut group and the shifted run do not have this problem, but they rest on assumed announcement times.
-- **Long look-back for 2025 and 2026 events.** OPEC+ decided monthly from 2025, and attacks clustered during the 2026 war, so recent events sit close together. Their estimation windows skip many days (44 to 77 for OPEC+ events, 83 to 165 for attacks) and stretch back up to 197 trading days for OPEC+ events and 267 for attacks, so their baselines come from an older period. No cap on the look-back was set (DECISIONS.md).
-- **2020 baselines (OPEC+).** The April and June 2020 events are fitted on windows that include the March 2020 crash (beta 1.28 and 1.34, residual std 1.7% and 2.0% a day, against a median of 1.2% for all events). Their per-event t statistics are small because of that noise.
-- **Overlapping events.** An event's estimation window skips other events' window days and reaches further back, so it can span more than 120 trading days and its beta comes from a slightly older period (`est_start` shows how far back). Only the other events' window days are skipped, not their run-up days before the window. Only events in the events CSVs and the mask-only lists count. Other news is not skipped, and the OPEC+ runs don't yet skip attack windows. Events whose event windows overlap each other (`nearby_events` above 0) still measure some of the same days, and nothing adjusts for that.
+- **Long look-back for 2025 and 2026 events.** OPEC+ decided monthly from 2025, and attacks clustered during the 2026 war, so recent events sit close together. Their estimation windows skip many days (up to 176 for OPEC+ events, 83 to 165 for attacks) and stretch back up to 296 trading days for OPEC+ events and 267 for attacks, so their baselines come from an older period. No cap on the look-back was set (DECISIONS.md). Because everything in between is skipped, two pairs of events are fitted on exactly the same 120 days (2025-05-13 to 2026-02-20): opec_2026_04_05 and opec_2026_05_03, and attack_2026_03_18 and attack_2026_04_18. Each pair shares one baseline, so its two CARs are not independent.
+- **2020 baselines (OPEC+).** The April and June 2020 events are fitted on windows that include the March 2020 crash (beta 1.29 and 1.34, residual std 1.7% and 2.0% a day, against a median of 1.2% for all events). Their per-event t statistics are small because of that noise.
+- **Overlapping events.** An event's estimation window skips other events' window days and reaches further back, so it can span more than 120 trading days and its beta comes from a slightly older period (`est_start` shows how far back). Only the other events' window days are skipped, not their run-up days before the window. Only events in the events CSVs and the mask-only lists count. Other news is not skipped. Events whose event windows overlap each other (`nearby_events` above 0) still measure some of the same days, and nothing adjusts for that.
 - **The test statistic ignores estimation error.** The per-event statistic divides the CAR by the residual standard deviation times the square root of the window length. It treats the fitted alpha and beta as exact, which slightly understates the true uncertainty, more so for longer windows.
 - **Calibration used simulated normal noise.** The test statistic was checked on simulated events with no planted effect, to confirm it doesn't flag effects too often by chance. That simulation used normally distributed returns. Real daily returns have fatter tails, so on real data the test may produce false positives somewhat more often than the calibration suggests.
 - **XLE and ITA are part of SPY.** Energy and defense stocks are in the S&P 500, so part of any sector move also shows up in the benchmark. The overlap is small for energy, but it slightly dampens measured abnormal returns.
@@ -339,10 +348,8 @@ Written in Python 3.13 with pandas, statsmodels and scipy, using Claude Code (an
 
 - `/review-last`: the last commit. Did methodology change without a DECISIONS.md entry, and do tests cover it?
 - `/audit-decisions`: every DECISIONS.md entry checked against the code.
-- `/check-results`: ok and failed counts, overlap diagnostics, sample size and a skeptical reading of the OPEC+ results in `results/`.
-- `/check-events`: `events/opec_events.csv` checked against the rules below, plus a list of rows to verify against their primary sources (by hand, since it can't open URLs).
-
-`/check-results` and `/check-events` were written for the OPEC+ files. For the supply-route files, name them in the extra notes.
+- `/check-results`: ok and failed counts, overlap diagnostics, sample size and a skeptical reading of the OPEC+ and supply-route results in `results/`.
+- `/check-events`: both events CSVs and the attack mask-only list checked against the rules below, plus a list of rows to verify against their primary sources (by hand, since it can't open URLs).
 
 Text after a command is passed along as extra notes, for example `/review-last focus on day 0`.
 

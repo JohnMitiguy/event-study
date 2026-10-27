@@ -12,7 +12,7 @@ Audit DECISIONS.md against the code. For each entry, in order, give a one-line v
 Then list:
 
 1. Entries that are wrong or stale, with what the code actually does.
-2. Behavior in src/event_study/ and scripts/run_opec.py that has no entry but is a real methodology choice (it could change a number in a result). For each, suggest a one-line entry in the form `Decision: X. Reason: Y.` Leave the reason as "Reason: (needs your input)" if the code doesn't make it clear.
+2. Behavior in src/event_study/, scripts/run_opec.py and scripts/run_supply_route.py that has no entry but is a real methodology choice (it could change a number in a result). For each, suggest a one-line entry in the form `Decision: X. Reason: Y.` Leave the reason as "Reason: (needs your input)" if the code doesn't make it clear.
 
 Don't edit DECISIONS.md.
 

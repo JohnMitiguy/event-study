@@ -76,6 +76,7 @@ from event_study.events import (
     load_events,
     load_mask_events,
     load_supply_route_events,
+    main_and_shifted_day0s,
 )
 from event_study.prices import load_cached, simple_returns
 from event_study.runner import estimation_dates, events_needing_later_data, run_events
@@ -168,15 +169,6 @@ def check_enough_events(events: pd.DataFrame) -> None:
         )
 
 
-def _main_and_shifted(main: pd.DataFrame, shifted: pd.DataFrame) -> pd.Series:
-    """Every row's day 0 from main, plus the shifted day 0 of its time_assumed rows.
-
-    main and shifted are the same file loaded with shift_assumed False and
-    True. .loc[mask, "day0"] keeps only the rows where mask is True.
-    """
-    return pd.concat([main["day0"], shifted.loc[shifted["time_assumed"], "day0"]])
-
-
 def build_mask_day0s(
     opec_events_path: Path = OPEC_EVENTS_PATH,
     opec_mask_path: Path = OPEC_MASK_PATH,
@@ -187,20 +179,21 @@ def build_mask_day0s(
     The union of: the OPEC+ events (load_events, leak time where present),
     the OPEC+ mask-only list and the supply-route mask-only list. For every
     time_assumed row both the main and the shifted day 0 are in
-    (DECISIONS.md), since either could be the reaction day. A day 0 in more
-    than one list is kept once.
+    (DECISIONS.md), since either could be the reaction day
+    (events.main_and_shifted_day0s). A day 0 in more than one list is kept
+    once.
 
     Note: runner's nearby_mask_events counts these day 0s, so a time_assumed
     row next to an attack counts twice (main and shifted).
     """
     parts = [
-        _main_and_shifted(
+        main_and_shifted_day0s(
             load_events(opec_events_path), load_events(opec_events_path, shift_assumed=True)
         ),
-        _main_and_shifted(
+        main_and_shifted_day0s(
             load_mask_events(opec_mask_path), load_mask_events(opec_mask_path, shift_assumed=True)
         ),
-        _main_and_shifted(
+        main_and_shifted_day0s(
             load_mask_events(mask_path), load_mask_events(mask_path, shift_assumed=True)
         ),
     ]

@@ -14,7 +14,7 @@ Read DECISIONS.md before changing any methodology.
 - Event time = leak_datetime_et if present, else announcement_datetime_et. Day 0 is computed from event time. Untimed leaks are not used.
 - Windows count trading days, never calendar days.
 - Estimation window must end before day 0 and before every event window starts. No look-ahead.
-- The estimation window skips trading days inside any other event's widest event window (other events in the same run, so the same security and benchmark) and reaches further back to keep est_length days. It never uses a day after day -gap. Event windows are never masked.
+- The estimation window skips trading days inside any other event's widest event window (other events in the same run, the mask-only lists, and the other event type: OPEC+ runs skip attacks, attack runs skip OPEC+ decisions) and reaches further back to keep est_length days. It never uses a day after day -gap. Event windows are never masked.
 - Results code reads prices only through prices.load_cached.
 - Estimation length, gap, and event windows are parameters, never hardcoded.
 - Any averaging across events must count N from status "ok" only and report every excluded event with its reason.

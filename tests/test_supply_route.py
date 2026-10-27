@@ -5,8 +5,10 @@ The script is loaded from its file path, as in test_run_opec.py; loading it
 runs only the imports and constants, so nothing is downloaded or written.
 """
 
+import hashlib
 import importlib.util
 import itertools
+import json
 from pathlib import Path
 
 import numpy as np
@@ -23,6 +25,7 @@ from event_study.event_days import next_session, nyse_calendar
 from event_study.events import (
     MASK_COLUMNS,
     SUPPLY_ROUTE_COLUMNS,
+    load_events,
     load_mask_events,
     load_supply_route_events,
 )
@@ -230,6 +233,52 @@ def test_build_mask_day0s_includes_main_and_shifted_day0s(tmp_path):
     ]
 
 
+def old_build_mask_day0s(opec_events_path, opec_mask_path, mask_path) -> pd.DatetimeIndex:
+    """A copy of build_mask_day0s from before main_and_shifted_day0s moved to events.py."""
+
+    def main_and_shifted(main, shifted):
+        return pd.concat([main["day0"], shifted.loc[shifted["time_assumed"], "day0"]])
+
+    parts = [
+        main_and_shifted(
+            load_events(opec_events_path), load_events(opec_events_path, shift_assumed=True)
+        ),
+        main_and_shifted(
+            load_mask_events(opec_mask_path), load_mask_events(opec_mask_path, shift_assumed=True)
+        ),
+        main_and_shifted(
+            load_mask_events(mask_path), load_mask_events(mask_path, shift_assumed=True)
+        ),
+    ]
+    day0s = pd.concat(parts, ignore_index=True)
+    return pd.DatetimeIndex(day0s.drop_duplicates().sort_values())
+
+
+def test_build_mask_day0s_unchanged_on_the_real_files():
+    """The refactor gives exactly the old day 0s on the committed files.
+
+    When the three mask files are the ones the saved run used, the count also
+    matches mask_day0_count in results/supply_route_run_info.json. That run
+    hashed raw bytes (before file_sha256 ignored CRLF), so either hash counts.
+    """
+    run = load_script("run_supply_route")
+    paths = [ROOT / p for p in (run.OPEC_EVENTS_PATH, run.OPEC_MASK_PATH, run.MASK_PATH)]
+    day0s = run.build_mask_day0s(*paths)
+    assert day0s.equals(old_build_mask_day0s(*paths))
+
+    info_path = ROOT / "results" / "supply_route_run_info.json"
+    if not info_path.exists():
+        return
+    info = json.loads(info_path.read_text(encoding="utf-8"))
+    keys = ("opec_events_file_sha256", "opec_mask_file_sha256", "mask_file_sha256")
+    same_files = all(
+        info[key] in (reporting.file_sha256(p), hashlib.sha256(p.read_bytes()).hexdigest())
+        for key, p in zip(keys, paths, strict=True)
+    )
+    if same_files:
+        assert len(day0s) == info["mask_day0_count"]
+
+
 def test_mask_day0s_reach_the_attack_estimation_windows():
     """An OPEC mask inside an attack's estimation window is skipped there."""
     run = load_script("run_supply_route")
@@ -395,6 +444,44 @@ def test_pre_war_sample_leaves_out_attacks_from_war_start(capsys):
     out = capsys.readouterr().out
     assert "Left out of the pre_war sample (3):" in out
     assert f"sim_4 (red_sea, ok): on or after {cut.date()} (war began)" in out
+
+
+def test_confound_note_never_reaches_an_output(tmp_path):
+    """Changing only confound_note leaves every output table identical
+    (DECISIONS.md: a note may be added after a run because no output reads it).
+
+    run_all on simulated returns, from events loaded from a CSV, then the
+    long results and abnormal tables and the across-event table.
+    """
+    run = load_script("run_supply_route")
+    returns = {}
+    for seed, ticker in enumerate(run.SECURITIES):
+        returns[ticker] = fake_returns(np.random.default_rng(30 + seed), n_days=320)
+    dates = returns["XLE"][0].index
+    outputs = []
+    for i, note in enumerate(("", "2024-07-10 OPEC+ decision in [-5,+5] (example.com), added later")):
+        rows = [
+            supply_row(
+                event_id=f"a{k}",
+                announcement_datetime_et=f"{dates[150 + 20 * k].date()} 10:00",
+                confound_note=note,
+            )
+            for k in range(6)
+        ]
+        folder = tmp_path / f"notes_{i}"
+        folder.mkdir()
+        events = load_supply_route_events(write_supply(folder, rows))
+        runs = run.run_all(events, returns, pd.DatetimeIndex([dates[100]]))
+        results = {ticker: r for ticker, (r, _) in runs.items()}
+        abnormal = {ticker: a for ticker, (_, a) in runs.items()}
+        outputs.append(
+            (run.long_format(results), run.long_format(abnormal), run.across_event_table(results))
+        )
+    first, second = outputs
+    assert "confound_note" not in first[0].columns
+    assert first[2]["tested"].any()
+    for a, b in zip(first, second, strict=True):
+        pd.testing.assert_frame_equal(a, b)
 
 
 def test_holm_family_shrinks_to_tested_rows():

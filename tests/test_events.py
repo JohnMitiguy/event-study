@@ -11,6 +11,7 @@ from event_study.events import (
     REQUIRED_COLUMNS,
     load_events,
     load_mask_events,
+    main_and_shifted_day0s,
     parse_eastern,
 )
 
@@ -354,6 +355,37 @@ def test_mask_shift_moves_only_time_assumed_rows(tmp_path):
     rows = [mask_row(event_id="a", time_assumed="1"), mask_row(event_id="b", time_assumed="0")]
     masks = load_masks(tmp_path, rows, shift_assumed=True)
     assert masks["day0"].tolist() == [pd.Timestamp("2024-06-05"), pd.Timestamp("2024-06-04")]
+
+
+def test_main_and_shifted_day0s_adds_the_next_session_of_time_assumed_rows_only(tmp_path):
+    rows = [
+        mask_row(event_id="firm"),  # Tuesday 2024-06-04 10:00
+        mask_row(event_id="assumed", announcement_datetime_et="2024-06-14 12:00", time_assumed="1"),
+        mask_row(event_id="zero", announcement_datetime_et="2024-07-09 10:00", time_assumed="0"),
+    ]
+    path = write_events(tmp_path, rows, MASK_COLUMNS)
+    day0s = main_and_shifted_day0s(load_mask_events(path), load_mask_events(path, True))
+    # Friday 14 Jun 2024: the shifted day 0 is Monday 17 Jun.
+    assert day0s.tolist() == [
+        pd.Timestamp("2024-06-04"),
+        pd.Timestamp("2024-06-14"),
+        pd.Timestamp("2024-07-09"),
+        pd.Timestamp("2024-06-17"),
+    ]
+
+
+def test_main_and_shifted_day0s_works_on_events_files(tmp_path):
+    rows = [
+        valid_row(event_id="firm"),
+        valid_row(event_id="assumed", announcement_datetime_et="2024-09-10 12:00", time_assumed="1"),
+    ]
+    path = write_events(tmp_path, rows)
+    day0s = main_and_shifted_day0s(load_events(path), load_events(path, shift_assumed=True))
+    assert day0s.tolist() == [
+        pd.Timestamp("2024-06-04"),
+        pd.Timestamp("2024-09-10"),
+        pd.Timestamp("2024-09-11"),
+    ]
 
 
 @pytest.mark.parametrize(

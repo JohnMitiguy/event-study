@@ -16,15 +16,23 @@ Steps:
    against the NYSE trading calendar and STOPS with a ValueError on a
    failure: windows count rows, so a missing day would shift every window
    without any error.
-3. Load events/opec_events.csv (leak time used where present) and
-   events/opec_mask_only.csv (real news that is not tested: its days are
-   skipped in the estimation windows, nothing more). If any event's widest
+3. Load events/opec_events.csv (leak time used where present) and the mask
+   day 0s (load_mask_day0s): real news that is not tested here, whose
+   [-5,+5] days are skipped in the estimation windows, nothing more. They
+   are events/opec_mask_only.csv, plus (from v1.1, DECISIONS.md) every
+   counted supply-route attack in events/supply_route_events.csv and every
+   row of events/supply_route_mask_only.csv, with the next session too for
+   its time_assumed rows. The attack day 0s are the same in every run: the
+   --official-time and --shift-assumed flags only move OPEC+ rows. The one
+   combined set goes to run_events, to estimation_days (no_outliers sample)
+   and, with --dates-only, to estimation_dates. If any event's widest
    window ends after the cached data ends, STOP and ask for --refresh rather
    than recording those events as failed.
 4. Run the market model for every event and print a summary, including each
    failed event and why.
 5. Save results/opec_results.csv, results/opec_run_info.json (which data,
-   settings, events file and code produced the results),
+   settings, events and mask files, including the supply-route files, and
+   code produced the results),
    results/opec_abnormal.csv (each event's abnormal return on days -5 to +5)
    and, if any event ran, charts/opec_events.png (one small panel per event)
    and charts/opec_caar.png (average cumulative abnormal return by event
@@ -57,7 +65,8 @@ output_paths), so this run can never overwrite the main results.
 
 With --shift-assumed, day 0 of every time_assumed row moves one trading day
 later (the third report in DECISIONS.md); outputs get "_day0_shifted". It is a
-complete run of its own, so its skipped estimation days come from its own day 0s.
+complete run of its own, so its skipped estimation days come from its own day 0s
+(OPEC+ events and OPEC+ mask rows; the attack day 0s do not move).
 
 Printing, run-info and chart helpers that are not OPEC-specific live in
 event_study.reporting; this script passes them its tickers, groups,
@@ -72,7 +81,13 @@ import pandas as pd
 import yfinance
 
 from event_study import reporting
-from event_study.events import DIRECTIONS, load_events, load_mask_events
+from event_study.events import (
+    DIRECTIONS,
+    load_events,
+    load_mask_events,
+    load_supply_route_events,
+    main_and_shifted_day0s,
+)
 from event_study.prices import load_cached, simple_returns
 from event_study.runner import estimation_dates, estimation_days, run_events
 from event_study.windows import DEFAULT_EST_LENGTH, DEFAULT_EVENT_WINDOWS, DEFAULT_GAP
@@ -81,6 +96,10 @@ SECURITY = "XLE"
 BENCHMARK = "SPY"
 EVENTS_PATH = Path("events") / "opec_events.csv"
 MASK_PATH = Path("events") / "opec_mask_only.csv"
+# Supply-route attacks (from v1.1): their days are skipped in the OPEC+
+# estimation windows, nothing more; they are never run or tested here.
+SUPPLY_ROUTE_EVENTS_PATH = Path("events") / "supply_route_events.csv"
+SUPPLY_ROUTE_MASK_PATH = Path("events") / "supply_route_mask_only.csv"
 
 # The headline result, fixed before the first full run (DECISIONS.md): the
 # cross-sectional t on [-1,+1], for cuts and increases separately. They
@@ -163,8 +182,15 @@ def build_run_info(
     git: tuple,
     use_leak: bool,
     shift_assumed: bool = False,
+    *,
+    attack_mask_day0_count: int,
 ) -> dict:
-    """Everything needed to tell whether two runs used the same inputs."""
+    """Everything needed to tell whether two runs used the same inputs.
+
+    attack_mask_day0_count: how many distinct supply-route day 0s the
+    estimation windows skipped (load_attack_masks). The supply-route files
+    and their hashes are recorded because they set those skipped days.
+    """
     commit, dirty = git
     return {
         "tickers": {
@@ -184,6 +210,11 @@ def build_run_info(
         "events_file_sha256": reporting.file_sha256(EVENTS_PATH),
         "mask_file": MASK_PATH.as_posix(),
         "mask_file_sha256": reporting.file_sha256(MASK_PATH),
+        "supply_route_events_file": SUPPLY_ROUTE_EVENTS_PATH.as_posix(),
+        "supply_route_events_file_sha256": reporting.file_sha256(SUPPLY_ROUTE_EVENTS_PATH),
+        "supply_route_mask_file": SUPPLY_ROUTE_MASK_PATH.as_posix(),
+        "supply_route_mask_file_sha256": reporting.file_sha256(SUPPLY_ROUTE_MASK_PATH),
+        "attack_mask_day0_count": attack_mask_day0_count,
         "yfinance_version": yfinance.__version__,
         "pandas_version": pd.__version__,
         "git_commit": commit,
@@ -206,6 +237,11 @@ def print_run_info(info: dict) -> None:
         f"  events file sha256 {info['events_file_sha256'][:12]}, "
         f"mask file sha256 {info['mask_file_sha256'][:12]}, use_leak {info['use_leak']}, "
         f"shift_assumed {info['shift_assumed']}"
+    )
+    print(
+        f"  supply-route events sha256 {info['supply_route_events_file_sha256'][:12]}, "
+        f"supply-route masks sha256 {info['supply_route_mask_file_sha256'][:12]}, "
+        f"attack mask day 0s {info['attack_mask_day0_count']}"
     )
     commit = info["git_commit"][:12] if info["git_commit"] else "unavailable"
     print(f"  git commit {commit}, uncommitted changes: {info['git_dirty']}")
@@ -322,6 +358,79 @@ def load_masks(shift_assumed: bool) -> pd.DataFrame:
     return masks
 
 
+def attack_day0s(
+    attacks: pd.DataFrame, masks: pd.DataFrame, shifted_masks: pd.DataFrame
+) -> pd.DatetimeIndex:
+    """Supply-route day 0s whose [-5,+5] days the OPEC+ estimation windows skip.
+
+    attacks: the counted attacks (load_supply_route_events, leak time where
+    present). masks and shifted_masks: the attack mask-only file loaded
+    with shift_assumed False and True. Every counted attack's day 0, every
+    mask row's day 0, and the next session of time_assumed mask rows
+    (events.main_and_shifted_day0s; DECISIONS.md: either day could be the
+    reaction). Sorted, each day once.
+
+    Assumption: these never depend on --official-time or --shift-assumed.
+    Those flags are about OPEC+ rows; the attacks are masked the same way
+    run_supply_route.py masks them.
+    """
+    day0s = pd.concat(
+        [attacks["day0"], main_and_shifted_day0s(masks, shifted_masks)], ignore_index=True
+    )
+    return pd.DatetimeIndex(day0s.drop_duplicates().sort_values())
+
+
+def load_attack_masks() -> pd.DatetimeIndex:
+    """attack_day0s from SUPPLY_ROUTE_EVENTS_PATH and SUPPLY_ROUTE_MASK_PATH, printed.
+
+    The paths are read when called (not as default arguments), so a test
+    can point them at its own files. Counted attacks always use their leak
+    time where present (load_supply_route_events default), also in an
+    --official-time run; no attack has a leak time today.
+    """
+    attacks = load_supply_route_events(SUPPLY_ROUTE_EVENTS_PATH)
+    masks = load_mask_events(SUPPLY_ROUTE_MASK_PATH)
+    shifted = load_mask_events(SUPPLY_ROUTE_MASK_PATH, shift_assumed=True)
+    day0s = attack_day0s(attacks, masks, shifted)
+    print(
+        f"\nSupply-route attacks masked ({len(attacks)} counted, {len(masks)} mask-only; "
+        f"{len(day0s)} day 0s skipped in estimation windows, never tested):"
+    )
+    for _, row in attacks.iterrows():
+        print(f"  {row['event_id']} (day 0 {row['day0'].date()}): counted attack")
+    # zip pairs each mask row with the same row loaded shifted.
+    for (_, row), (_, moved) in zip(masks.iterrows(), shifted.iterrows(), strict=True):
+        also = f", and {moved['day0'].date()} (time_assumed)" if row["time_assumed"] else ""
+        print(f"  {row['event_id']} (day 0 {row['day0'].date()}{also}): mask-only attack")
+    return day0s
+
+
+def combined_mask_day0s(opec_mask_day0s, attack_mask_day0s) -> pd.DatetimeIndex:
+    """The OPEC+ mask-only day 0s plus the attack day 0s, sorted, each day once.
+
+    The one set every OPEC+ estimation window skips (run_events,
+    estimation_days and estimation_dates all get it). A day in both lists
+    is kept once, as in run_supply_route.build_mask_day0s; this only
+    changes the nearby_mask_events count, never which days are skipped.
+    """
+    # One dtype for both, so concat does not have to reconcile two.
+    parts = [pd.Series(d, dtype="datetime64[ns]") for d in (opec_mask_day0s, attack_mask_day0s)]
+    day0s = pd.concat(parts, ignore_index=True)
+    return pd.DatetimeIndex(day0s.drop_duplicates().sort_values())
+
+
+def load_mask_day0s(shift_assumed: bool) -> tuple[pd.DatetimeIndex, pd.DatetimeIndex]:
+    """(every mask day 0 for this run, the attack part of it), both lists printed.
+
+    The OPEC+ mask-only rows follow --shift-assumed (load_masks); the
+    attack day 0s do not (attack_day0s). main and dates_only both call
+    this, so a real run and --dates-only skip the same days.
+    """
+    masks = load_masks(shift_assumed)
+    attacks = load_attack_masks()
+    return combined_mask_day0s(masks["day0"], attacks), attacks
+
+
 def average_car_path(results: pd.DataFrame, abnormal: pd.DataFrame, group: str) -> pd.Series:
     """Average cumulative abnormal return by event day for one direction.
 
@@ -353,14 +462,14 @@ def dates_only(prices: dict[str, pd.Series], use_leak: bool, shift_assumed: bool
         placeholders[SECURITY], placeholders[BENCHMARK], (SECURITY, BENCHMARK)
     )
     events = load_events(EVENTS_PATH, use_leak=use_leak, shift_assumed=shift_assumed)
-    masks = load_masks(shift_assumed)
+    mask_day0s, _ = load_mask_day0s(shift_assumed)
     table = estimation_dates(
         security.index,
         events,
         DEFAULT_EST_LENGTH,
         DEFAULT_GAP,
         DEFAULT_EVENT_WINDOWS,
-        masks["day0"],
+        mask_day0s,
     )
     reporting.print_dates_only(table)
 
@@ -387,8 +496,11 @@ def main() -> None:
     security, benchmark = reporting.common_dates(security, benchmark, (SECURITY, BENCHMARK))
 
     # 3-4. Events, the data-coverage check, and the market model.
+    #    mask_day0s (OPEC+ mask-only rows and supply-route attacks) is built
+    #    once here and passed to every call below that places estimation
+    #    windows, so the outlier sample uses the same skipped days.
     events = load_events(EVENTS_PATH, use_leak=use_leak, shift_assumed=shift)
-    masks = load_masks(shift)
+    mask_day0s, attack_mask_day0s = load_mask_day0s(shift)
     reporting.stop_if_data_too_short(
         events, security.index[-1], REFRESH_COMMAND, DEFAULT_EVENT_WINDOWS
     )
@@ -399,7 +511,7 @@ def main() -> None:
         DEFAULT_EST_LENGTH,
         DEFAULT_GAP,
         DEFAULT_EVENT_WINDOWS,
-        masks["day0"],
+        mask_day0s,
     )
     reporting.print_summary(results, DEFAULT_EVENT_WINDOWS)
 
@@ -407,7 +519,9 @@ def main() -> None:
     results_path.parent.mkdir(parents=True, exist_ok=True)
     results.to_csv(results_path, index=False)
     print(f"Saved {results_path}")
-    info = build_run_info(prices, security, git, use_leak, shift)
+    info = build_run_info(
+        prices, security, git, use_leak, shift, attack_mask_day0_count=len(attack_mask_day0s)
+    )
     run_info_path.write_text(json.dumps(info, indent=2) + "\n", encoding="utf-8")
     print_run_info(info)
     print(f"Saved {run_info_path}")
@@ -429,7 +543,7 @@ def main() -> None:
         DEFAULT_EST_LENGTH,
         DEFAULT_GAP,
         DEFAULT_EVENT_WINDOWS,
-        masks["day0"],
+        mask_day0s,
     )
     hits = outlier_hits(est_days, outliers.index)
     clean_results = without_outliers(results, hits)

@@ -43,7 +43,9 @@ estimation windows, but it is never run, tested or averaged. Columns are
 MASK_COLUMNS; event_id, announcement_datetime_et, time_assumed and
 source_url follow the rules above, and reason (why it is masked and not an
 event) must be filled in. There is no leak column: the announcement time
-sets day 0.
+sets day 0. main_and_shifted_day0s gives a file's day 0s with both the
+main and the shifted day 0 of its time_assumed rows, for masks that must
+cover either reaction day.
 
 Supply-route file (load_supply_route_events, e.g.
 events/supply_route_events.csv): attacks on Gulf energy facilities, Red Sea
@@ -494,6 +496,21 @@ def load_mask_events(path: Path | str, shift_assumed: bool = False) -> pd.DataFr
         values = [p[column] for p in parsed_rows]
         masks[column] = pd.Series(values, index=table.index, dtype=dtype)
     return masks
+
+
+def main_and_shifted_day0s(main: pd.DataFrame, shifted: pd.DataFrame) -> pd.Series:
+    """Every row's day 0 from main, plus the shifted day 0 of its time_assumed rows.
+
+    main and shifted are the same file loaded with shift_assumed False and
+    True (load_events or load_mask_events). A time_assumed row could react
+    on its date or the next session, so a mask built from this skips both
+    (DECISIONS.md). Rows with a known time give one day 0 only.
+
+    Assumes both frames have the same rows in the same order, as two loads
+    of one file do. Duplicates are kept; the caller drops them if needed.
+    .loc[mask, "day0"] keeps only the rows where mask is True.
+    """
+    return pd.concat([main["day0"], shifted.loc[shifted["time_assumed"], "day0"]])
 
 
 def _check_supply_route_choices(row: dict, errors: list[str]) -> None:

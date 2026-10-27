@@ -64,7 +64,7 @@ Decision: confound_note records only specific, dated, sourced items inside [-1,+
 
 Decision: A pause or delay of scheduled increases is tagged hold, even when the same release includes a small pre-announced increase. Reason: tagging it increase would pool a supply-tightening surprise with real loosening events and wash out the cut and increase tests.
 
-Decision: Failed events still mask other events' estimation windows; if day -10 is masked the window ends on the latest unmasked day before it; there is no cap on how far back the window reaches yet; only earlier events mask later ones. Reason: the market reacted whether or not an event's own regression ran, a cap will be chosen from event dates before any CARs are read, and a later event cannot be known when an earlier one is estimated.
+Decision: Failed events still mask other events' estimation windows; if day -10 is masked the window ends on the latest unmasked day before it;only earlier events mask later ones. Reason: the market reacted whether or not an event's own regression ran, and a later event cannot be known when an earlier one is estimated.
 
 Decision: Each event's estimation window leaves out every trading day inside another event's widest configured event window (all other rows of the same events table, ok or failed; not their run-up days, not events outside the table) and reaches further back to keep est_length days. Reason: those days carry another event's reaction, which would inflate resid_std and bend alpha and beta, and a fixed est_length keeps every regression the same size.
 
@@ -96,7 +96,7 @@ Decision: Real OPEC news that is not a tested event (failed meetings, the pre-sa
 
 Decision: The headline test is the cross-sectional t on [-1,+1], run separately for cuts and increases; the pooled row is descriptive only. Reason: they predict opposite signs and cancel when pooled.
 
-Decision: No cap on estimation look-back; the longest span is 197 sessions. Reason: chosen from the dates table before any CAR was read.
+Decision: No cap on estimation look-back; after v1.1 the longest OPEC+ span is 296 sessions and the longest attack span is 267. Reason: the no-cap rule was fixed before any CAR was read, and a cap chosen now would be chosen after seeing results.
 
 Decision: saudi_unilateral rows are kept out of the all/cut/hold/increase groups and tested as their own group. Reason: implements the separate-subsample rule.
 
@@ -111,8 +111,6 @@ Decision: Attacks are run on XLE (primary), ITA and GLD, each against an SPY mar
 Decision: The primary attack test is the cross-sectional t on [0,+1] for XLE with all attacks pooled; the other five security and window tests ([0,+1] and [-5,+5]) are secondary with Holm-adjusted p-values, and every test stays two-sided. Reason: attacks are not scheduled, so day -1 carries no news, and naming one test first avoids picking the best of six.
 
 Decision: Attack subgroups are route (gulf_facility, red_sea, hormuz) and escalation (first_attack, named_escalation), each tested only with at least 5 ok events. Reason: they replace direction, since every attack has the same expected sign.
-
-Decision: Attack runs also skip the windows of every OPEC event and OPEC mask-only row, using both the main and shifted day 0 of time_assumed OPEC rows; OPEC runs do not skip attack windows until a v1.1 rerun. Reason: OPEC news would bend XLE baselines, and the v1.0.0 OPEC results stay fixed.
 
 Decision: The OPEC event list is not run on ITA or GLD, and the GLD market model uses SPY even though its beta is near zero (noted in the README). Reason: there is no OPEC hypothesis for defense or gold, and one benchmark keeps the specification consistent.
 
@@ -140,7 +138,13 @@ Decision: An attack's confound_note lists specific, dated, sourced items inside 
 
 Decision: A mask-only attack whose date alone pins day 0 (weekend or overnight local time) is entered date-only with time_assumed 0. Reason: every plausible time gives the same masked days.
 
+Decision: Attack runs skip the windows of every OPEC+ event and OPEC+ mask-only row (main and shifted day 0 of time_assumed rows); from v1.1 every OPEC+ run (main, official-time, shift-assumed, dates-only) skips the [-5,+5] of every counted attack and attack mask row (both days for time_assumed rows), with the same attack day 0s in every OPEC+ run. Reason: attack news moves XLE, and the OPEC+ timing flags say nothing about attack timing.
 
+Decision: Run info file hashes are SHA-256 with CRLF turned into LF, so Windows and Linux checkouts give the committed file's hash; hashes from runs before v1.1 used raw bytes and are not comparable. Reason: git rewrites line endings on checkout.
+
+Decision: An OPEC+ confound_note lists any counted or masked attack whose day 0 falls in its [-1,+1]. Reason: attack days are skipped in estimation but never in event windows.
+
+Decision: v1.1 OPEC+ results replace v1.0.0 as the reported results; v1.0.0 stays at its tag. Reason: the rerun was logged in DECISIONS.md before it was run, so the switch was not chosen by its numbers.
 ## Not built yet
 
 - Saudi unilateral subsample report
