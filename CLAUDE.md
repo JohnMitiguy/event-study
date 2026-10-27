@@ -3,7 +3,8 @@
 
 Python 3.13 (uv, pandas, statsmodels) framework measuring market reactions to geopolitical events. Market model: regress a security on a benchmark over a pre-event estimation window, abnormal return = actual minus predicted, sum into CARs over short windows, average across events, t-test. Null results get reported honestly.
 
-First event type: OPEC+ decisions (XLE vs SPY). Later: terrorist attacks, tariffs, OFAC sanctions, Red Sea.
+Event types done: OPEC+ decisions (XLE vs SPY) and supply-route attacks on Gulf energy facilities, Red Sea shipping and Hormuz (XLE primary, ITA and GLD, all vs SPY). Later: terrorist attacks, tariffs, OFAC sanctions.
+
 
 Read DECISIONS.md before changing any methodology.
 

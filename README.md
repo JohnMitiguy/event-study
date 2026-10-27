@@ -142,7 +142,7 @@ t is the cross-sectional t-test and p is its unadjusted two-sided p-value. Holm 
 
 The leave-one-out, without-one-event and before-day-0 numbers are descriptive checks run after the results, not pre-registered tests.
 
-**Pre-war sample (robustness only).** This sample keeps the 16 attacks before 28 Feb 2026. XLE [0,+1] +0.86% (t 1.11), XLE [-5,+5] +2.52% (t 1.94), ITA [0,+1] +0.46% (t 1.77), GLD [0,+1] +0.35% (t 0.86). Nothing is significant here either. It leaves out the 6 attacks of 1 Mar, 18 Mar, 18 Apr, 27 Jun, 22 Jul and 24 Aug 2026.
+**Pre-war sample (robustness only).** This sample keeps the 16 attacks before 28 Feb 2026. XLE [0,+1] +0.86% (t 1.11), XLE [-5,+5] +2.52% (t 1.94), ITA [0,+1] +0.46% (t 1.77), GLD [0,+1] +0.35% (t 0.86). No all-attacks test is significant here either. As in the full sample, the subgroup with the largest t is GLD red_sea [-5,+5] (+3.05%, t 2.82, N 8). It leaves out the 6 attacks of 1 Mar, 18 Mar, 18 Apr, 27 Jun, 22 Jul and 24 Aug 2026.
 
 **Subgroups.** On XLE [0,+1]:
 
@@ -169,7 +169,9 @@ On 23 Nov 2020 a Houthi missile hit a fuel tank at Aramco's North Jeddah bulk pl
 - **XLE's beta is low in 2026.** It is 1.06 to 1.35 for the 2019 to 2021 attacks, and 0.02 to 0.29 for the 2026 attacks. The OPEC+ run shows the same drop over the same months.
 - **2026 estimation windows reach back to mid-2025.** OPEC+ decisions are monthly and many attacks during the war are masked, so the 2026 windows skip 83 to 165 days and start between Apr and Jun 2025. Their baselines come mostly from before the war.
 - **attack_2026_07_22 is a UKMTO report at exactly 16:00 ET**, the close, so its day 0 rolls to Thu 23 Jul.
-- **attack_2021_03_07 is 2 sessions after opec_2021_03_04** (a surprise OPEC+ hold, XLE [-1,+1] +8.73%). Its [-5,+5] CAR (+5.96%) carries that move, while its [0,+1] (-2.42%) does not. Without it, XLE [-5,+5] is +2.10% (t 2.01).
+- **Seven attack windows contain an OPEC+ decision.** OPEC+ days are masked in estimation, not inside event windows. Two attacks share day 0 with an OPEC+ increase: attack_2025_07_06 (opec_2025_07_05) and attack_2026_03_01 (opec_2026_03_01). An increase should push XLE down, so these work against the expected sign; without them XLE [0,+1] is +0.52% (t 0.80, N 20). Five more have one elsewhere in [-5,+5]: attack_2021_03_07 and attack_2024_03_06 (holds at day -2), attack_2025_08_31 and attack_2026_06_27 (increases at day +4), attack_2025_09_29 (an increase at day +5).
+- **attack_2021_03_07 is 2 sessions after opec_2021_03_04** (an OPEC+ hold, XLE [-1,+1] +8.73%). Its [-5,+5] CAR (+5.96%) carries that move, while its [0,+1] (-2.42%) does not. Without it, XLE [-5,+5] is +2.10% (t 2.01). These checks are descriptive, not pre-registered.
+- **Four counted attacks share their [0,+1] window with a masked attack.** The spacing rule masks later attacks in estimation but never inside an event window, so the [0,+1] CARs of attack_2019_05_12, attack_2025_07_06, attack_2026_03_01 and attack_2026_03_18 also carry a second attack (mask_2019_05_14, mask_2025_07_07, the two 2 Mar 2026 masks, mask_2026_03_19). Without those four, XLE [0,+1] is +0.41% (t 0.58, N 18), a descriptive check, not a pre-registered test.
 - **The 2026 attacks are inside the war**, and the last two came after the Houthis declared a blockade of Saudi Arabia on 20 Jul 2026. The tests assume events are independent, and attacks within one war may not be.
 - **Attacks are not the only supply news.** Only attacks and OPEC+ news are masked in estimation. Sanctions, outages and other supply news are not.
 
@@ -301,7 +303,7 @@ One row per counted attack, from primary sources only. The columns and rules are
 | `notes` | A paraphrase of the event, the source time exactly as stated, the conversion to Eastern time, and how the source was checked. |
 | `time_assumed` | Blank or `0`. Attacks need a timestamped source, so an untimed attack goes in the mask-only file instead. |
 
-The two leak columns and `surprise_flag` exist but are blank on every attack. `decision_group` and `direction` are not used. The loader rejects any two counted attacks less than 11 trading days apart and lists every such pair.
+The two leak columns and `surprise_flag` exist but are blank on every attack. There are no `decision_group` or `direction` columns. The loader rejects any two counted attacks less than 11 trading days apart and lists every such pair.
 
 #### Masked attacks
 
@@ -337,8 +339,10 @@ Written in Python 3.13 with pandas, statsmodels and scipy, using Claude Code (an
 
 - `/review-last`: the last commit. Did methodology change without a DECISIONS.md entry, and do tests cover it?
 - `/audit-decisions`: every DECISIONS.md entry checked against the code.
-- `/check-results`: ok and failed counts, overlap diagnostics, sample size and a skeptical reading of `results/`.
-- `/check-events`: the events CSV checked against the rules below, plus a list of rows to verify against their primary sources (by hand, since it can't open URLs).
+- `/check-results`: ok and failed counts, overlap diagnostics, sample size and a skeptical reading of the OPEC+ results in `results/`.
+- `/check-events`: `events/opec_events.csv` checked against the rules below, plus a list of rows to verify against their primary sources (by hand, since it can't open URLs).
+
+`/check-results` and `/check-events` were written for the OPEC+ files. For the supply-route files, name them in the extra notes.
 
 Text after a command is passed along as extra notes, for example `/review-last focus on day 0`.
 

@@ -1,77 +1,62 @@
 # Status
 
-Last updated: 2026-10-27 (first supply-route run, README section drafted)
+Last updated: 2026-10-27 (review and cleanup of the supply-route work)
 
 ## Where we are
 
-- **v1.0.0 released 26 Oct 2026** (tag on 3ad1bed): https://github.com/JohnMitiguy/event-study/releases/tag/v1.0.0. Repo is public, with description, topics, social preview and MIT license.
+- **v1.0.0 released 26 Oct 2026** (tag on 3ad1bed): https://github.com/JohnMitiguy/event-study/releases/tag/v1.0.0. Repo is public, with description, topics, social preview and MIT license. The description, topics and social preview still describe OPEC+ only.
+- **Both event types are run** on clean commit c0466d1: every `*_run_info*.json` says `git_dirty: false`. Prices through 2026-10-15 (ITA and GLD cached to 2026-10-26, trimmed to SPY's dates).
+- Tests (27 Oct, after the cleanup): ruff clean, 446 passed, 2 skipped (reviewer-hook test: no bash found from pytest's shell).
 
-- **First full run done** on the 37 events (main, `--shift-assumed`, `--official-time`), all 37 ok, 0 failed, prices through 2026-10-15. Rerun on the clean commit fcd40e8: every `opec_run_info*.json` says `git_dirty: false`, and all results CSVs and charts came out byte-for-byte identical to the first run.
-- Headline (cross-sectional t, [-1,+1]): cuts N 7, +1.51%, t 1.56; increases N 17, -0.51%, t -0.49. Both null. Increases on [-5,+5]: -3.26%, t -2.38 (BMP -2.47, Wilcoxon p 0.045), t stays between -2.03 and -2.79 when any one event is dropped. Most of the cut move is before day 0 (+3.10% by day -1).
-- Shifted run (13 time_assumed rows): cuts [-1,+1] +0.80% (t 0.57), increases -0.82% (t -0.90), increases [-5,+5] -3.33% (t -2.42). Firm-only: cuts 3 (too few), increases N 14: -1.37% (t -1.34), [-5,+5] -4.55% (t -3.19). Official-time run identical to main (the one leak is the same day as its release). opec_2025_04_03 upgraded 26 Oct from time_assumed to 09:15 ET (Dow Jones, date-only rule) with surprise_flag 1 (Reuters "unexpectedly").
-- Outlier-exclusion run built (`no_outliers` sample in `opec_across_event*.csv`): top 5 residual days, using one full-sample beta (an assumption, DECISIONS.md does not say which beta), are 2020-11-09, 2020-03-09, 2020-03-18, 2020-04-17, 2020-04-02. 9 Mar 2020 is masked, so it hits no fit. 5 events are dropped (opec_2020_04_09, opec_2020_06_06, opec_2020_12_03, opec_2021_03_04, opec_2021_07_18). Cuts N 6: +1.61% (t 1.41); increases N 15: -0.88% (t -0.93); increases [-5,+5] -3.34% (t -2.44). `runner.estimation_days` gives the fitted days per event.
-- opec_2025_04_03 is the biggest single event: [-1,+1] -12.40% (t -6.09) during the 3-4 Apr 2025 selloff (SPY -4.9%, -5.8%). confound_note now filled (2 Apr tariffs after the close, Fox Business); the other 16 increases average +0.23% (t 0.29) on [-1,+1].
-- README now has a Results section, the average-CAR chart (`charts/opec_caar.png`), a filled Excluded events table, and fixes for the stale lines found in the 21 Oct audit.
-- Tests (27 Oct): ruff clean, 445 passed.
+### OPEC+ decisions (v1.0.0, results fixed)
 
-## Supply-route attacks (second event type, built 26 Oct 2026, events entered 27 Oct, first run 27 Oct)
+- 37 events (main, `--shift-assumed`, `--official-time`), all ok.
+- Headline (cross-sectional t, [-1,+1]): cuts N 7, +1.51%, t 1.56; increases N 17, -0.51%, t -0.49. Both null. Increases on [-5,+5]: -3.26%, t -2.38 (BMP -2.47, Wilcoxon p 0.045), t -2.03 to -2.79 when any one event is dropped. Most of the cut move is before day 0 (+3.10% by day -1).
+- Shifted run: cuts +0.80% (t 0.57), increases -0.82% (t -0.90), increases [-5,+5] -3.33% (t -2.42). Firm-only: cuts 3 (too few), increases N 14 -1.37% (t -1.34), [-5,+5] -4.55% (t -3.19). Official-time run identical to main.
+- Outlier run (top 5 residual days, one full-sample beta): 5 events dropped; cuts N 6 +1.61% (t 1.41), increases N 15 -0.88% (t -0.93), [-5,+5] -3.34% (t -2.44).
+- opec_2025_04_03 [-1,+1] -12.40% (t -6.09), on the Apr 2025 tariff selloff (confound_note filled). Without it, the other 16 increases average +0.23% (t 0.29).
+- OPEC+ runs do not mask attack windows (DECISIONS.md); that waits for a v1.1 rerun.
 
-- **First run 27 Oct 2026** on clean commit 37a0ce4 (`supply_route_run_info.json`: `git_dirty: false`). 22 events, 22 ok on XLE, ITA and GLD, 0 failed, 79 mask day 0s. Prices: XLE/SPY through 2026-10-15 (OPEC+ snapshot), ITA/GLD cached through 2026-10-26, trimmed to shared dates.
-- **Primary (XLE [0,+1], all): N 22, +0.60%, t 1.02, p 0.321. Null.** Secondary, Holm p: XLE [-5,+5] +2.27% (t 2.25, p 0.035, Holm 0.177); ITA [0,+1] +0.30% (t 0.86), ITA [-5,+5] -0.46% (t -0.50), GLD [0,+1] -0.55% (t -1.06), GLD [-5,+5] +0.14% (t 0.14), all Holm 1.000.
-- Pre-war (N 16): XLE [0,+1] +0.86% (t 1.11), [-5,+5] +2.52% (t 1.94); nothing significant. hormuz and first_attack have N 3 there.
-- Betas: XLE median 0.82 before 2026 but 0.02 to 0.29 for the 2026 rows (OPEC+ 2026 betas fall the same way, to -0.29); ITA 0.63 to 1.14; GLD median -0.03 before 2026, 0.13 to 0.52 in 2026.
-- Biggest XLE [0,+1]: attack_2020_11_23 +9.84% (t 3.19); without it +0.16% (scratchpad, not pre-registered). XLE [-5,+5] is mostly pre-attack: days -5 to -1 average +1.83%, days 0 to +5 add +0.44% (biggest pre-attack: attack_2021_03_07 +9.00%, attack_2020_11_23 +8.40%).
-- confound_note for attack_2020_11_23 added after the run at John's request (vaccine and transition rally; AstraZeneca release, Fox Business, CBS and Reuters/BOE Report, all fetched 27 Oct). No output reads confound_note, so no number changes, but the events file hash no longer matches `supply_route_run_info.json`. Commit the run outputs before the CSV change so each commit is consistent.
-- README restructured for two event types: new title, "In 30 seconds" split by event type, shared Method, an "OPEC+ decisions" section, and a full "Supply-route attacks" section (definition, design, results, subgroups, largest event, caveats), a supply-route events CSV table and a masked-attacks table. Test count 414 -> 445.
-- Chart axis fix (approved by John 27 Oct): `PercentFormatter(decimals=0)` labelled ticks 0.5% apart as "0%, 1%, 2%, 2%" (the supply-route XLE chart read 2%, 2%, 2%, 1%, 0%, 0%). Replaced by `reporting.percent_label`, which uses only the decimals each tick needs; whole-percent ticks look the same as before. Tested in `tests/test_reporting.py`. The XLE supply-route chart is back in the README "In 30 seconds". Charts in the repo get regenerated by a clean rerun of all four runs (run_opec main, `--shift-assumed`, `--official-time`, run_supply_route). That rerun also gives `supply_route_run_info.json` an events hash that matches the committed CSV (d39ffa5 committed the confound_note with the old run info).
-- Tests (27 Oct, after the axis fix): ruff clean, 446 passed, 2 skipped (reviewer-hook test: no bash found from pytest's shell).
+### Supply-route attacks (first run 27 Oct, pre-registered)
 
-- Plan approved and decisions committed (560b69d): XLE primary, ITA and GLD secondary, all vs SPY, expected sign positive; primary test XLE [0,+1] cross-sectional t, all attacks pooled; windows [0,+1] and [-5,+5]; Holm p over the other five; two-sided; subgroups route and escalation; counted attacks at least 11 trading days apart; no time_assumed rows; attack runs mask all OPEC events and OPEC masks (main and shifted day 0); OPEC runs do not mask attacks until a v1.1.
-- Built: `src/event_study/reporting.py` (shared helpers moved out of run_opec.py), `group_columns` in the runner, `events.load_supply_route_events` (spacing check), `scripts/run_supply_route.py` (`--dates-only`; no `--refresh`, so the shared XLE/SPY cache is never replaced), header-only `events/supply_route_events.csv` and `events/supply_route_mask_only.csv`, tests in `tests/test_supply_route.py`. OPEC outputs byte-identical after the refactor.
-- The run refuses to start below 5 events. The first `--dates-only` run downloads ITA and GLD once.
-- Candidates saved in `events/supply_route_candidates.md` (39 rows; Q-A/Q-B/Q-C settled at its top).
-- 27 Oct: pre-war sample built (`sample` column `all`/`pre_war` in `supply_route_across_event.csv`; pre_war rows have role `robustness`, no primary, no Holm; left-out attacks listed). `WAR_START` = 2026-02-28, compared with the ET date of event_time.
-- 27 Oct: all 39 candidates entered (counts updated below). 20 counted in `supply_route_events.csv` (15 pre-war), 19 in `supply_route_mask_only.csv` (12 spacing, 6 no time, 1 off-route). `--dates-only` runs clean: no attack has a nearby attack, est_span 131 to 267 sessions (2026 attacks reach back to mid-2025 because the war months are mostly masked). Each row's notes give the source time as stated, the ET conversion, and a fetch-check line.
-- Fetch check: only attack_2019_07_19, attack_2019_09_14, attack_2020_11_23, attack_2022_01_17 and the dates of 7 mask rows were confirmed by fetch. CENTCOM, ONI, UKMTO, S&P, Seatrade and GlobalSecurity block the fetch tool (403/402). John checked the other 16 by hand on 27 Oct ("all good or good enough"); their notes say so.
-- 27 Oct, later: attack_2026_03_18 (Ras Laffan) moved to the events file at 15:28 ET (Libnanews live item, 19:28:14 GMT, confirmed by fetch; John's QNA time 15:21 ET, no URL), day 0 Wed 18 Mar. mask_2026_03_19 is now masked for spacing. Now 21 counted (15 pre-war), 18 masked (13 spacing, 4 no time, 1 off-route).
-- 27 Oct, last: attack_2021_03_07 (Ras Tanura) moved to the events file at 15:35 ET Sun (Saudi MoD via SPA 2197893, 23:35 AST, checked by hand by John; the page renders by script), day 0 Mon 8 Mar 2021. Its confound_note: 2 sessions after opec_2021_03_04, so [-5,+5] carries that OPEC+ move. **Final list: 22 counted (16 pre-war), 17 masked (13 spacing, 3 no time, 1 off-route).**
-- Decision lines for untimed attacks, earliest time and time_assumed masks pasted by John 27 Oct. attack_2026_07_22 is a UKMTO report at exactly 16:00 ET, so day 0 rolls to Thu 23 Jul.
-- 27 Oct, clean rerun of all four runs on c0466d1 (axis fix): every results CSV byte-identical. Changed: 4 run info files (all now `git_dirty: false`, commit c0466d1; supply-route events hash now e71ad1dc0cb4, matching the committed CSV) and 6 charts (opec_events x3, supply_route_caar x3). opec_caar*.png and supply_route_events_*.png came out identical. Before this, the committed opec_run_info*.json said `git_dirty: true` at 560b69d (left from the refactor check); that is fixed now. README test count 445 -> 448.
-- Next: a manager-agent review and cleanup pass (handoff prompt given 27 Oct). Update the GitHub repo description (it may still say OPEC+ only).
+- 22 counted attacks (16 pre-war), 17 masked (12 spacing only, 4 no stated time, 1 off-route, per the `reason` column; earlier STATUS lines said 13/3/1). All 22 ok on XLE, ITA, GLD. 79 mask day 0s.
+- **Primary (XLE [0,+1]): N 22, +0.60%, t 1.02, p 0.321. Null.** No secondary test survives Holm (best XLE [-5,+5] +2.27%, p 0.035, Holm 0.177). Pre-war N 16: nothing significant.
+- Descriptive, not pre-registered (scratchpad only, quoted in the README as such): without attack_2020_11_23 +0.16%; leave-one-out t on XLE [-5,+5] 1.93 to 2.88; [-5,+5] is +1.83% before day 0 and +0.44% after; without attack_2021_03_07 [-5,+5] +2.10% (t 2.01); without the 2 attacks sharing day 0 with an OPEC+ increase +0.52% (t 0.80, N 20); without the 4 attacks sharing [0,+1] with a masked attack +0.41% (t 0.58, N 18).
+- confound_note on attack_2020_11_23 added after the run (allowed by DECISIONS.md, no output reads it).
+- Clean rerun of all four runs on c0466d1 (chart axis fix): every results CSV byte-identical to the first run on 37a0ce4.
 
-## Changed this session (needs DECISIONS.md lines from the user)
+## Review of 27 Oct work (methodology-reviewer on 5 commits, plus check-results and check-events adapted to the supply-route files)
 
-- `events/opec_mask_only.csv` (8 rows, all opec.org slugs already in `opec_candidates.md`): 30 Nov 2016 OPEC-only cut, 5 Mar 2020 (covers the failed 6 Mar meeting), 5 Jan 2021, 1 Apr 2021 (A14), 5 Jul 2021 failed meeting, 3 Aug 2022, 5 Sep 2022, 4 Jun 2023. `events.load_mask_events` loads it; `run_events`/`estimation_dates` take `mask_day0s`; masks are skipped like other events' windows but get no results row. New diagnostic `nearby_mask_events` (1 for opec_2016_12_10 and opec_2021_07_18: mask news inside their own [-5,+5]). Run info records the mask file hash.
-- `events/dates_table.csv` regenerated with masks: longest span still 197 sessions, no errors.
-- Across-event groups: saudi_unilateral rows are kept out of all/cut/hold/increase and tested as their own group. `headline` column (True for [-1,+1] cut and increase), marked `*` in the printout.
-- New outputs: `results/opec_abnormal*.csv` and `charts/opec_caar*.png`. Fixed the per-event chart title running into the first row.
+- No number in any result is wrong or stale. Every README supply-route number matches the results CSVs; Holm recomputes exactly; events hash matches the committed CSV (after CRLF checkout, see below).
+- README fixed this session: "surprise OPEC+ hold" (unsourced; opec_2021_03_04 has no surprise_flag) changed to "OPEC+ hold"; new caveats for OPEC+ decisions inside 7 attack windows and masked attacks inside 4 attacks' [0,+1]; pre-war line notes the GLD red_sea subgroup; reviewer-command lines say they are OPEC-only.
 
-## Built
+## Next
 
-- Price loader with a frozen cache in `data/prices/` (`prices.load_cached`), simple returns, and a check of every return series against the NYSE trading calendar.
-- Events loader for `events/opec_events.csv`, with leak-time handling and validation that reports every bad row at once.
-- Event day 0 logic (actual closes, early closes, weekends, holidays) and trading-day windows.
-- Market model (OLS with intercept), abnormal returns, CARs and per-event test statistics, calibrated on simulated no-effect events.
-- Runner that runs every event, records failed events with reasons, and reports nearby events. `run_events` checks both return series against the NYSE calendar and raises a ValueError for non-session dates or missing sessions (moved from `run_opec.py`, so every caller gets it). It cannot see a series cut short at either end. `simulate.fake_returns` now uses real NYSE sessions (same numbers, new dates).
-- Estimation windows skip every day inside another event's widest window (other events in the same run, ok or failed) and reach further back to keep 120 days; if day -10 is skipped the window ends on the latest unskipped day before it. No cap on how far back. The runner reports `est_start`, `est_end` and `est_masked_days`; `est_overlap_days` is gone. A later event can never change an earlier event's row (tested by hand and as a property test, along with a property test that no estimation day lies inside another event's window).
-- Across-event tests in `aggregate.py`: cross-sectional t, standardized-CAR (BMP), Wilcoxon and sign test. A simulated power analysis is in `scripts/across_event_demo.py`, which also prints a formula-based count of events needed for 80% power: 26 ok events on [-1,+1], assuming a 1% day-0 abnormal return and 1% daily residual noise (10 on [0,0], 89 on [-5,+5]). That is an illustration, not a recorded target. The three counts are tested in `tests/test_across_event_demo.py`.
-- Methodology-reviewer Bash hook in `.claude/hooks/reviewer_bash_guard.py`: an allowlist of commands and, for each, the flags it may take; pytest file arguments must be relative paths under `tests/` with no `..` or backslash. Tested in `tests/test_reviewer_hook.py`, including a test that runs the hook command line from the agent file's frontmatter through bash (it skips with a reason if bash or uv can't be found). It is a backstop and fails open if it can't start.
-- `scripts/run_opec.py`: the OPEC+ run (XLE vs SPY), writing results, run info and a per-event chart. `--official-time` uses official announcement times and writes to separate `*_official_time` files. `--dates-only` prints per event the day 0, est_start, est_end, est_masked_days, est_span (trading days, inclusive) and nearby_events, computing no returns, regressions or CARs and saving nothing (`runner.estimation_dates`).
-- `run_opec.py` now calls the across-event tests after the per-event summary. For [-1,+1] and [-5,+5] it reports, for all events and separately for cut, increase and hold: N ok, mean CAR, cross-sectional t, BMP t, Wilcoxon p and sign test p. A group with fewer than 5 ok events prints "not tested (N < 5)". Groups are filters on the finished results table. Every event that is not ok is listed with its direction, status and reason. Written to `results/opec_across_event.csv` (`_official_time` suffix with `--official-time`): one row per window and group, with `tested` and `note` columns and empty statistics when not tested. Tested on simulated data (15 ok events plus one failed) and on the pilot; the numbers equal a direct `across_event_tests` call. Nothing in the method or the existing results changed.
-- time_assumed support: `time_assumed` column (required, blank/0/1, rejected with a leak time), `load_events(shift_assumed=...)` using `event_days.next_session`, `time_assumed` carried into results, `--shift-assumed` flag, and a `sample` column (`all`, `firm_only`) in the across-event CSV. A group below 5 ok events shows "too few events (N < 5)" (this replaces the older "not tested" wording below).
-- Tests (including property-based and fuzz tests), Ruff, and CI.
+1. **Events CSV edits (John):** confound_note for attack_2025_07_06 and attack_2026_03_01 (same day 0 as an OPEC+ increase); remove "surprise" from attack_2021_03_07's confound_note; decide on mask_2026_03_19 and mask_2026_07_26 (`time_assumed` 0 against DECISIONS.md line 129: flag them, or paste the date-only Decision line). None changes a number.
+2. **DECISIONS.md (John):** "Not built yet" still lists the official-time run (done 26 Oct). Draft lines given 27 Oct: escalation reasons, subgroups unadjusted, pre-war ET date, attack confound_note window, date-only mask rows.
+3. **Primary-source checks:** attack_2026_07_22 (16:00 ET exactly; any earlier report moves day 0 to Wed 22 Jul), attack_2026_03_18 (15:28 ET, 32 min before close; QNA 15:21 has no URL), attack_2019_07_19 (first public report before 16:00 ET?), attack_2019_05_12 (BIMCO time source not linked), mask_2026_08_04 and mask_2026_08_31 (report time vs incident time), mask_2026_07_26 (25 or 26 Jul).
+4. **Line endings:** event CSVs are checked out CRLF here (core.autocrlf true) and LF on Linux/CI, so `events_file_sha256` differs by machine. Fix needs John's OK (a `.gitattributes`, or hashing with normalized newlines).
+5. **Reviewer commands:** /check-results, /check-events and /audit-decisions are OPEC-only; extending them needs John's OK.
+6. **GitHub (John):** update the repo description, topics and social preview (still OPEC-only, says 414 tests).
+7. **v1.1 (not started):** OPEC+ runs mask attack windows; plan given 27 Oct.
+8. Source a confound_note check for the other large OPEC rows: opec_2020_12_03 (+9.06%), opec_2021_03_04 (+8.73%), opec_2026_04_05 ([-5,+5] -12.22%).
+9. OPEC sourcing: Al Jazeera 5 Dec 2019 time zone (opec_2019_12_05), A5 (6 or 7 Dec 2018), the opec_2022_10_05 11:00 official time, Sep 2016 Algiers releases (slugs 495, 496; inside opec_2016_12_10's estimation window, not masked), A14's table, 1B rows 2, 3, 6. Open call 5 (A2 on 24 or 25 May 2017).
+10. Saudi unilateral rows from Saudi Energy Ministry statements (5 Jan 2021 first; then remove mask_2021_01_05).
+11. Brent robustness check: confirm the calendar check covers a non-NYSE series first.
 
 ## Not built yet
 
 - Saudi unilateral subsample report.
 - Brent robustness check.
 
-## Next
+## Built
 
-1. Done 26 Oct: DECISIONS.md lines pasted, committed (fcd40e8), clean rerun.
-2. Source a confound_note for opec_2025_04_03 (3 Apr 2025 selloff), and check the other large rows: opec_2020_12_03 (+9.06%), opec_2021_03_04 (+8.73%), opec_2026_04_05 ([-5,+5] -12.22%).
-3. Sourcing: the Al Jazeera 5 Dec 2019 time zone (opec_2019_12_05), A5 (6 or 7 Dec 2018), the opec_2022_10_05 11:00 official time, the Sep 2016 Algiers releases (slugs 495, 496; inside opec_2016_12_10's estimation window, not masked), A14's table, 1B rows 2, 3, 6. Each one settled moves a row out of the mask file or into the CSV.
-4. Saudi unilateral rows from Saudi Energy Ministry statements (5 Jan 2021 first; then remove mask_2021_01_05).
-5. Done 26 Oct: outlier-exclusion run. User to remove it from DECISIONS.md "Not built yet" and add the beta line.
-6. Brent robustness check: confirm the calendar check covers a non-NYSE series first.
-7. Open call 5 (A2 on 24 or 25 May 2017) is still open.
+- Price loader with a frozen cache in `data/prices/` (`prices.load_cached`), simple returns, NYSE calendar check in `run_events`.
+- Events loaders: `events/opec_events.csv` (leak times, time_assumed, `--shift-assumed`), mask-only files, `load_supply_route_events` (11-session spacing check).
+- Day 0 logic (actual closes, early closes, weekends, holidays) and trading-day windows.
+- Market model (OLS with intercept), abnormal returns, CARs, per-event t, calibrated on simulated no-effect events.
+- Runner: failed events recorded with reasons, `nearby_events` and `nearby_mask_events`, estimation windows that skip every other event's and mask row's widest window (no cap on look-back), `est_start`, `est_end`, `est_masked_days`; `runner.estimation_dates` for `--dates-only`.
+- Across-event tests in `aggregate.py`: cross-sectional t, BMP, Wilcoxon, sign test. Power illustration in `scripts/across_event_demo.py`.
+- `scripts/run_opec.py` (main, `--shift-assumed`, `--official-time`, `--dates-only`, `--refresh`; samples all, firm_only, no_outliers) and `scripts/run_supply_route.py` (XLE, ITA, GLD; primary, Holm over five secondary tests, route and escalation subgroups, pre-war sample; no `--refresh`). Shared output code in `src/event_study/reporting.py` (incl. `percent_label` for chart ticks).
+- Methodology-reviewer subagent with a Bash allowlist hook (`.claude/hooks/reviewer_bash_guard.py`, tested in `tests/test_reviewer_hook.py`).
+- Tests (property-based and fuzz included), Ruff, CI.

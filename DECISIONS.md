@@ -130,7 +130,18 @@ Decision: Mask-only attacks with no time or with conflicting times are flagged t
 
 Decision: A confound_note may be added after a run, since no output reads it; the row's data and results stay as run, and the note says when it was added. Reason: notes explain results without changing them.
 
+Decision: named_escalation is a later attack with at least one of: deaths, a sinking or seizure, a new country or facility hit, a return after a lull of 30 days or more, or a source calling it an escalation; first_attack is the opening attack of its kind. Reason: a written list makes the judgment checkable, and it was fixed in the candidates list before any returns were read.
+
+Decision: Attack subgroups and the pre-war sample are reported unadjusted and outside the Holm family, which covers only the five secondary all-attack tests. Reason: they are descriptive breakdowns, not competing headline tests.
+
+Decision: The pre-war cut uses the Eastern-time date of each attack's event time. Reason: event times are stored in ET, and no counted attack is within a day of 28 Feb 2026, so the local date gives the same split.
+
+Decision: An attack's confound_note lists specific, dated, sourced items inside its [-5,+5], including any OPEC+ decision or masked attack whose day 0 falls there. Reason: attack windows are [0,+1] and [-5,+5], and the [-1,+1] rule was written for OPEC+.
+
+Decision: A mask-only attack whose date alone pins day 0 (weekend or overnight local time) is entered date-only with time_assumed 0. Reason: every plausible time gives the same masked days.
+
+
 ## Not built yet
-- Official-time robustness run (the --official-time flag exists, but the run has not been done)
+
 - Saudi unilateral subsample report
 - Brent robustness check
