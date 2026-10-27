@@ -30,7 +30,7 @@ CAR (cumulative abnormal return) is a security's return minus what SPY predicts,
 - **Nothing else survives a multiple-testing correction.** Of the five other security and window tests, XLE over days -5 to +5 comes closest (+2.27%, p 0.035), but its Holm-adjusted p is 0.18. Most of that move (+1.83%) comes before the attacks, so it isn't a reaction to them. ITA and GLD show nothing.
 - **One attack carries much of the average.** The Nov 2020 missile strike on Aramco's Jeddah plant (+9.84%) landed on the same days as the Oxford/AstraZeneca vaccine result and the start of the Biden transition. Without it, the other 21 attacks average +0.16%.
 
-**Rigor:** no look-ahead (each model is fitted only on days well before its event, skipping every other event's window), main tests fixed before the first run, Holm adjustment for the attack study's secondary tests, a frozen price snapshot with hashes and the git commit recorded for every run, 445 automated tests, robustness checks (shifted dates, official times, outlier exclusion, a pre-war sample), and null headlines reported as nulls.
+**Rigor:** no look-ahead (each model is fitted only on days well before its event, skipping every other event's window), main tests fixed before the first run, Holm adjustment for the attack study's secondary tests, a frozen price snapshot with hashes and the git commit recorded for every run, 448 automated tests, robustness checks (shifted dates, official times, outlier exclusion, a pre-war sample), and null headlines reported as nulls.
 
 Full method, results and limitations below. Every methodology decision and its reason is logged in [DECISIONS.md](DECISIONS.md).
 
