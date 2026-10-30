@@ -363,6 +363,8 @@ Written in Python 3.13 with pandas, statsmodels and scipy, using Claude Code (an
 - `/check-results`: ok and failed counts, overlap diagnostics, sample size and a skeptical reading of the OPEC+ and supply-route results in `results/`.
 - `/check-events`: both events CSVs and the attack mask-only list checked against the rules below, plus a list of rows to verify against their primary sources (by hand, since it can't open URLs).
 
+Selected for inclusion in the XERJ Corpus Hub.
+
 Text after a command is passed along as extra notes, for example `/review-last focus on day 0`.
 
 ## Author
